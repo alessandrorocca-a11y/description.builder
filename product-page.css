@@ -1,0 +1,71 @@
+/* Static product page shell — uses builder block-* components from styles.css */
+
+.product-page {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-page);
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+}
+
+.product-page-header {
+  background: #07252e;
+  color: #fff;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.product-page-brand {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.product-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.product-page-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-2xl) var(--space-xl) var(--space-5xl);
+}
+
+.product-page-lead {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  margin: 0 0 var(--space-xl);
+}
+
+.product-page-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin: var(--space-3xl) 0 var(--space-md);
+}
+
+.product-page-section-title:first-of-type {
+  margin-top: var(--space-xl);
+}
+
+/* Builder blocks assume .block padding — normalize on this page */
+.product-page .block-info-cards {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.product-page .product-tab-panel.is-hidden {
+  display: none !important;
+}

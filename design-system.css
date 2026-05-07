@@ -1,0 +1,220 @@
+/* =========================================================
+   Brand fonts — Nunito (the rounded variant, NOT Nunito Sans)
+   Locally hosted so the kit works offline.
+========================================================= */
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-ExtraLight.ttf')      format('truetype'); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-ExtraLightItalic.ttf')format('truetype'); font-weight: 200; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Light.ttf')           format('truetype'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-LightItalic.ttf')     format('truetype'); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Regular.ttf')         format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Italic.ttf')          format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Medium.ttf')          format('truetype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-MediumItalic.ttf')    format('truetype'); font-weight: 500; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-SemiBold.ttf')        format('truetype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-SemiBoldItalic.ttf')  format('truetype'); font-weight: 600; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Bold.ttf')            format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-BoldItalic.ttf')      format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-ExtraBold.ttf')       format('truetype'); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-ExtraBoldItalic.ttf') format('truetype'); font-weight: 800; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-Black.ttf')           format('truetype'); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('fonts/Nunito-BlackItalic.ttf')     format('truetype'); font-weight: 900; font-style: italic; font-display: swap; }
+
+/* =========================================================
+   Channels B2C Design System — Tokens
+   Source: Figma "🔴 UI Library - Portal B2C"
+
+   This is a WHITE-LABEL ticketing portal system. Each
+   operator (event organizer) supplies their own brand color,
+   which is plugged into --brand-primary. The token defaults
+   below use the system's documented "Channels" example
+   colors. Operator skins should override --brand-primary,
+   --brand-on-primary, and (optionally) --brand-accent.
+
+   The orange (#EE5400) is the LIBRARY's own documentation
+   color — used for figma annotations, callouts, status pills
+   in the Figma file itself. It is NOT a brand UI color.
+   ========================================================= */
+
+:root {
+  /* ---- Operator-overridable brand slot ---------------- */
+  /* Common patterns seen in Figma:
+     - Yellow CTA on dark text  (#FCC52C / #252309)
+     - Blue primary             (#009EE0 / #FFFFFF)
+     - Deep blue                (#0D69D4 / #FFFFFF)   */
+  --brand-primary:       #009EE0;   /* default = bright Channels blue */
+  --brand-primary-hover: #0D69D4;   /* deeper blue */
+  --brand-primary-press: #074a99;
+  --brand-on-primary:    #FFFFFF;
+  --brand-tint:          #E0F3FB;   /* 12% wash for selected/hover bg */
+
+  /* ---- Neutral scale (greys, top-of-metadata) --------- */
+  --c-black:     #000000;
+  --c-ink:       #252525;   /* primary text on light */
+  --c-ink-2:     #414141;   /* secondary text */
+  --c-grey-700:  #555F65;   /* slate, used for muted labels */
+  --c-grey-600:  #6B6B6B;
+  --c-grey-500:  #767676;
+  --c-grey-400:  #969BA5;
+  --c-grey-300:  #A0A0A0;
+  --c-grey-200:  #C6C6C6;   /* borders */
+  --c-grey-150:  #D9D9D9;   /* dividers */
+  --c-grey-100:  #E8E8E8;   /* light dividers */
+  --c-grey-75:   #F1F1F1;   /* row hover */
+  --c-grey-50:   #F2F2F2;   /* page wash */
+  --c-white:     #FFFFFF;
+
+  /* Semantic foreground / background tokens ------------- */
+  --fg-1:        var(--c-ink);
+  --fg-2:        var(--c-ink-2);
+  --fg-3:        var(--c-grey-500);
+  --fg-muted:    var(--c-grey-400);
+  --fg-on-dark:  var(--c-white);
+
+  --bg-page:     var(--c-white);
+  --bg-surface:  var(--c-white);
+  --bg-subtle:   var(--c-grey-50);
+  --bg-hover:    var(--c-grey-75);
+  --bg-inverse:  #1F1F1F;
+
+  --border-default: var(--c-grey-200);
+  --border-subtle:  var(--c-grey-100);
+  --border-strong:  var(--c-grey-700);
+
+  /* ---- Status / semantic colors ----------------------- */
+  --status-info:        #009EE0;
+  --status-info-tint:   #E0F3FB;
+  --status-success:     #007D00;
+  --status-success-tint:#E5F4E5;
+  --status-warning:     #FFC929;
+  --status-warning-tint:#FFF7DD;
+  --status-danger:      #C54600;   /* deep red-orange used for errors */
+  --status-danger-soft: #F54900;
+  --status-danger-tint: #FDEEE5;
+  --status-promo:       #FFECF9;   /* soft pink used for promotions */
+  --status-promo-ink:   #B0006B;
+
+  /* ---- Documentation / library color (Figma chrome) --- */
+  --doc-orange:      #EE5400;   /* the well-known orange in the Figma file */
+  --doc-orange-tint: #FDEEE5;
+
+  /* ---- Brand cover gradient (Cover page) -------------- */
+  --cover-lime:   #C4E456;
+  --cover-amber:  #FFCE6F;
+
+  /* =========================================================
+     Spacing — based on a 4 / 8 grid (Base-Unit-Spacing page)
+     The library names them xs..xxxl
+  ========================================================= */
+  --space-2xs: 2px;
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  16px;
+  --space-xl:  24px;
+  --space-2xl: 32px;
+  --space-3xl: 40px;
+  --space-4xl: 48px;
+  --space-5xl: 64px;
+
+  /* =========================================================
+     Radii
+  ========================================================= */
+  --radius-xs:  2px;
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  10px;   /* card / modal */
+  --radius-xl:  16px;
+  --radius-pill: 999px;
+
+  /* =========================================================
+     Shadows — taken from /UI-Basics/Shadows.
+     Light, layered, never colored.
+  ========================================================= */
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-2: 0 2px 4px rgba(66,66,66,0.10), 0 4px 12px rgba(66,66,66,0.10);
+  --shadow-3: 0 4px 8px rgba(0,0,0,0.10),  0 12px 24px rgba(66,66,66,0.15);
+  --shadow-4: 0 8px 16px rgba(0,0,0,0.10), 0 24px 48px rgba(0,0,0,0.20);
+  --shadow-overlay: 0 16px 48px rgba(0,0,0,0.30);
+
+  /* =========================================================
+     Z-index
+  ========================================================= */
+  --z-bar:     10;
+  --z-sticky:  20;
+  --z-overlay: 100;
+  --z-dialog:  1000;
+  --z-toast:   2000;
+
+  /* =========================================================
+     Motion
+  ========================================================= */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 280ms;
+
+  /* =========================================================
+     TYPE
+     The product UI uses Nunito Sans (body) + Inter (display
+     numerals & headings in some places). Library chrome uses
+     Inter. Some operator skins use Ubuntu / Montserrat /
+     Poppins as a brand swap (operator-overridable).
+  ========================================================= */
+  --font-sans: 'Nunito', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale — Figma "Typography" frame */
+  --type-h1-size:   32px;   --type-h1-lh: 36px;   --type-h1-weight: 800;
+  --type-h2-size:   28px;   --type-h2-lh: 32px;   --type-h2-weight: 700;
+  --type-h3-size:   26px;   --type-h3-lh: 30px;   --type-h3-weight: 700;
+  --type-h4-size:   24px;   --type-h4-lh: 28px;   --type-h4-weight: 700;
+  --type-h5-size:   20px;   --type-h5-lh: 24px;   --type-h5-weight: 300;
+  --type-h6-size:   18px;   --type-h6-lh: 22px;   --type-h6-weight: 300;
+  --type-subtitle-size: 16px; --type-subtitle-lh: 20px; --type-subtitle-weight: 300;
+  --type-body-size: 14px;   --type-body-lh: 18px;   --type-body-weight: 400;
+  --type-body-bold-weight: 700;
+  --type-caption-size: 12px;--type-caption-lh: 16px;--type-caption-weight: 300;
+  --type-button-size: 16px; --type-button-lh: 20px; --type-button-weight: 700;
+  --type-overline-size: 12px; --type-overline-lh: 14px; --type-overline-tracking: 0.10em;
+}
+
+/* =========================================================
+   Semantic element styles — apply tokens directly
+========================================================= */
+html, body {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-lh);
+  color: var(--fg-1);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, .h1 { font-family: var(--font-sans); font-size: var(--type-h1-size); line-height: var(--type-h1-lh); font-weight: var(--type-h1-weight); margin: 0; letter-spacing: -0.01em; }
+h2, .h2 { font-family: var(--font-sans); font-size: var(--type-h2-size); line-height: var(--type-h2-lh); font-weight: var(--type-h2-weight); margin: 0; }
+h3, .h3 { font-family: var(--font-sans); font-size: var(--type-h3-size); line-height: var(--type-h3-lh); font-weight: var(--type-h3-weight); margin: 0; }
+h4, .h4 { font-family: var(--font-sans); font-size: var(--type-h4-size); line-height: var(--type-h4-lh); font-weight: var(--type-h4-weight); margin: 0; }
+h5, .h5 { font-family: var(--font-sans); font-size: var(--type-h5-size); line-height: var(--type-h5-lh); font-weight: var(--type-h5-weight); margin: 0; }
+h6, .h6 { font-family: var(--font-sans); font-size: var(--type-h6-size); line-height: var(--type-h6-lh); font-weight: var(--type-h6-weight); margin: 0; }
+
+p, .body  { font-size: var(--type-body-size); line-height: var(--type-body-lh); }
+.subtitle { font-size: var(--type-subtitle-size); line-height: var(--type-subtitle-lh); font-weight: 300; }
+.caption  { font-size: var(--type-caption-size); line-height: var(--type-caption-lh); color: var(--fg-3); font-weight: 300; }
+.overline { font-size: var(--type-overline-size); line-height: var(--type-overline-lh); font-weight: 700; letter-spacing: var(--type-overline-tracking); text-transform: uppercase; }
+
+.mono     { font-family: var(--font-mono); }
+
+a { color: var(--brand-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Display (Inter Medium) — used for cover / large numerals */
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}

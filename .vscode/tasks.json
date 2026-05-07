@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Description Builder: serve",
+      "type": "shell",
+      "command": "python3 -m http.server 8765 --bind 127.0.0.1",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "description-builder-http",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Serving HTTP on"
+        }
+      }
+    },
+    {
+      "label": "Description Builder: open in editor browser",
+      "type": "shell",
+      "command": "echo",
+      "args": ["${input:dbOpenSimpleBrowser}"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Description Builder: preview",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Description Builder: serve",
+        "Description Builder: open in editor browser"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "dbOpenSimpleBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["http://127.0.0.1:8765/"]
+    }
+  ]
+}

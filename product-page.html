@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plan Creation — Product preview</title>
+  <link rel="stylesheet" href="design-system.css?v=2" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" />
+  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="product-page.css?v=1" />
+</head>
+<body class="product-page">
+  <header class="product-page-header">
+    <span class="product-page-brand">FeverZone</span>
+    <nav class="product-page-nav" aria-label="Primary">
+      <span>Discover</span>
+      <span>Tickets</span>
+      <span>Help</span>
+    </nav>
+  </header>
+
+  <main class="product-page-main">
+    <h1 class="block-title-h1">Grand Prix weekend · Madrid</h1>
+    <p class="product-page-lead">
+      Typical product description layout: hero title, tabbed story + media, event meta, and ticket-style cards in a horizontal carousel — aligned with Plan Creation / FeverZone builder blocks.
+    </p>
+
+    <h2 class="product-page-section-title">Experience tabs</h2>
+    <div class="block-tabs">
+      <div class="block-tabs-nav" aria-label="Experience">
+        <div class="block-tabs-nav-inner">
+          <button type="button" class="block-tabs-pill active" data-tab="0">Grounds Pass</button>
+          <button type="button" class="block-tabs-pill" data-tab="1">Hospitality</button>
+          <button type="button" class="block-tabs-pill" data-tab="2">VIP</button>
+        </div>
+      </div>
+
+      <div class="product-tab-panel block-tabs-panel" data-tab-panel="0">
+        <div class="block-tabs-panel-main">
+          <div class="block-tabs-panel-title">General admission zones</div>
+          <div class="block-tabs-panel-body">
+            Roam the fan zones, watch screens around the circuit, and soak up race-weekend atmosphere with friends and family.
+          </div>
+        </div>
+        <div class="block-tabs-panel-media">
+          <img src="https://picsum.photos/seed/fzgrounds/640/400" alt="" width="640" height="400" />
+        </div>
+      </div>
+
+      <div class="product-tab-panel block-tabs-panel is-hidden" data-tab-panel="1">
+        <div class="block-tabs-panel-main">
+          <div class="block-tabs-panel-title">Lounges &amp; catering</div>
+          <div class="block-tabs-panel-body">
+            Elevated sightlines, chef-led menus, and dedicated service — perfect when you want comfort between sessions.
+          </div>
+        </div>
+        <div class="block-tabs-panel-media">
+          <img src="https://picsum.photos/seed/fzhosp/640/400" alt="" width="640" height="400" />
+        </div>
+      </div>
+
+      <div class="product-tab-panel block-tabs-panel block-tabs-panel--no-media is-hidden" data-tab-panel="2">
+        <div class="block-tabs-panel-main">
+          <div class="block-tabs-panel-title">Paddock &amp; guided access</div>
+          <div class="block-tabs-panel-body">
+            Behind-the-scenes routes and premium seating blocks. Availability is limited; pricing reflects peak sessions.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="product-page-section-title">Event details</h2>
+    <div class="block-event-details-card">
+      <div class="event-details-heading">Practical information</div>
+      <div class="event-details-body">
+        <div class="event-details-col event-details-col--meta">
+          <div class="event-details-row">
+            <span class="ms material-symbols-outlined event-details-icon event-details-icon--pin">location_on</span>
+            <span class="event-details-meta-text">Circuito del Jarama, Madrid</span>
+          </div>
+          <div class="event-details-row">
+            <span class="ms material-symbols-outlined event-details-icon event-details-icon--calendar">calendar_month</span>
+            <span class="event-details-meta-text">14–16 June · gates open 09:00</span>
+          </div>
+        </div>
+        <div class="event-details-col event-details-col--promo">
+          <span class="ms material-symbols-outlined event-details-icon event-details-icon--ticket">confirmation_number</span>
+          <p class="event-details-promo">
+            Bundle parking + shuttle at checkout this week — limited slots for race day.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="product-page-section-title">Tickets</h2>
+    <div class="block-info-cards block-info-cards--carousel">
+      <button type="button" class="block-info-cards-nav block-info-cards-nav--prev product-cards-prev" aria-label="Previous cards">
+        <span class="ms material-symbols-outlined">chevron_left</span>
+      </button>
+      <button type="button" class="block-info-cards-nav block-info-cards-nav--next product-cards-next" aria-label="Next cards">
+        <span class="ms material-symbols-outlined">chevron_right</span>
+      </button>
+      <div class="block-info-cards-track product-cards-track" id="product-cards-track">
+        <article
+          class="block-info-card block-info-card--highlight"
+          style="--ic-accent:#e31b23;--ic-readable-accent:#e31b23;--ic-cta-fg:#ffffff;"
+        >
+          <div class="info-card-top">
+            <img class="info-card-image" src="https://picsum.photos/seed/fzt1/640/360" alt="" />
+            <span class="info-card-badge">POPULAR</span>
+          </div>
+          <div class="info-card-main">
+            <div class="info-card-heading">Weekend pass</div>
+            <div class="info-card-price">€189</div>
+            <ul class="info-card-features">
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>All-day grounds access</span></li>
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>Parking bundle eligible</span></li>
+            </ul>
+            <div class="info-card-cta">
+              <span>Select</span>
+              <span class="ms material-symbols-outlined">arrow_forward</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="block-info-card" style="--ic-accent:#345a8b;--ic-readable-accent:#345a8b;--ic-cta-fg:#ffffff;">
+          <div class="info-card-top">
+            <div class="info-card-header">
+              <span class="info-card-badge" style="background:#7c3aed;">BEST VIEW</span>
+            </div>
+          </div>
+          <div class="info-card-main">
+            <div class="info-card-heading">Grandstand T12</div>
+            <div class="info-card-price">€245</div>
+            <ul class="info-card-features">
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>Covered seating</span></li>
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>Big-screen sightlines</span></li>
+            </ul>
+            <div class="info-card-cta">
+              <span>From €245.00</span>
+              <span class="ms material-symbols-outlined">arrow_forward</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="block-info-card" style="--ic-accent:#111111;--ic-readable-accent:#111111;--ic-cta-fg:#ffffff;">
+          <div class="info-card-top">
+            <img class="info-card-image" src="https://picsum.photos/seed/fzt3/640/360" alt="" />
+          </div>
+          <div class="info-card-main">
+            <div class="info-card-heading">Family bundle</div>
+            <div class="info-card-price">€420</div>
+            <ul class="info-card-features">
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>2 adults + 2 juniors</span></li>
+              <li><span class="ms material-symbols-outlined info-card-check">check</span><span>Kid zone wristbands</span></li>
+            </ul>
+            <div class="info-card-cta">
+              <span>Select</span>
+              <span class="ms material-symbols-outlined">arrow_forward</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var pills = document.querySelectorAll(".block-tabs-pill[data-tab]");
+      var panels = document.querySelectorAll("[data-tab-panel]");
+      pills.forEach(function (pill) {
+        pill.addEventListener("click", function () {
+          var id = pill.getAttribute("data-tab");
+          pills.forEach(function (p) {
+            p.classList.toggle("active", p === pill);
+          });
+          panels.forEach(function (panel) {
+            var show = panel.getAttribute("data-tab-panel") === id;
+            panel.classList.toggle("is-hidden", !show);
+          });
+        });
+      });
+
+      var track = document.getElementById("product-cards-track");
+      var prev = document.querySelector(".product-cards-prev");
+      var next = document.querySelector(".product-cards-next");
+      function scrollCards(dir) {
+        if (!track) return;
+        var card = track.querySelector(".block-info-card");
+        var gap = 12;
+        var w = card ? card.getBoundingClientRect().width : 272;
+        track.scrollBy({ left: dir * (w + gap), behavior: "smooth" });
+      }
+      if (prev) prev.addEventListener("click", function () {
+        scrollCards(-1);
+      });
+      if (next) next.addEventListener("click", function () {
+        scrollCards(1);
+      });
+    })();
+  </script>
+</body>
+</html>
