@@ -182,8 +182,14 @@
       });
 
       var track = document.getElementById("product-cards-track");
+      var carousel = track ? track.parentElement : null;
       var prev = document.querySelector(".product-cards-prev");
       var next = document.querySelector(".product-cards-next");
+      function syncCarouselOverflow() {
+        if (!track || !carousel) return;
+        var max = Math.max(0, track.scrollWidth - track.clientWidth);
+        carousel.classList.toggle("block-info-cards--carousel-overflow", max > 2);
+      }
       function scrollCards(dir) {
         if (!track) return;
         var card = track.querySelector(".block-info-card");
@@ -197,6 +203,13 @@
       if (next) next.addEventListener("click", function () {
         scrollCards(1);
       });
+      syncCarouselOverflow();
+      window.addEventListener("resize", syncCarouselOverflow);
+      if (track) {
+        track.querySelectorAll("img").forEach(function (img) {
+          if (!img.complete) img.addEventListener("load", syncCarouselOverflow, { once: true });
+        });
+      }
     })();
   </script>
 </body>

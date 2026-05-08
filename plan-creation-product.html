@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="design-system.css?v=3" />
   <link rel="stylesheet" href="styles.css?v=3" />
-  <link rel="stylesheet" href="plan-creation-product.css?v=1" />
+  <link rel="stylesheet" href="plan-creation-product.css?v=2" />
 </head>
 <body class="pcp-page">
   <!-- Assets from Figma MCP export (node 4297:9477) -->
@@ -46,41 +46,38 @@
     </div>
   </nav>
 
-  <section class="pcp-hero" aria-label="Event summary">
+  <div class="pcp-stage">
     <img class="pcp-hero-bg" src="pcp-assets/imgFrame1000003659.svg" alt="" />
-    <div class="pcp-hero-inner">
-      <div class="pcp-hero-row">
-        <img class="pcp-hero-thumb" src="pcp-assets/imgFrame1000003659.svg" alt="" />
-        <div class="pcp-hero-copy">
-          <div class="pcp-hero-titleblock">
-            <h1 class="pcp-hero-title" id="pcp-hero-title">Candlelight Santa Monica: Christmas Movie Soundtracks</h1>
-            <div class="pcp-rating-row">
-              <span class="pcp-rating-num">4.6</span>
-              <span class="pcp-stars" aria-hidden="true">
-                <img src="pcp-assets/imgIcon4.svg" alt="" />
-                <img src="pcp-assets/imgIcon4.svg" alt="" />
-                <img src="pcp-assets/imgIcon4.svg" alt="" />
-                <img src="pcp-assets/imgIcon4.svg" alt="" />
-                <img src="pcp-assets/imgIcon5.svg" alt="" />
-              </span>
-              <span class="pcp-rating-count">(171)</span>
+    <main class="pcp-main">
+      <div class="pcp-col-left">
+        <section class="pcp-hero-row" aria-label="Event summary">
+          <img class="pcp-hero-thumb" src="pcp-assets/imgHeroCandlelight.png" alt="" />
+          <div class="pcp-hero-copy">
+            <div class="pcp-hero-titleblock">
+              <h1 class="pcp-hero-title" id="pcp-hero-title">Candlelight Santa Monica: Christmas Movie Soundtracks</h1>
+              <div class="pcp-rating-row">
+                <span class="pcp-rating-num">4.6</span>
+                <span class="pcp-stars" aria-hidden="true">
+                  <img src="pcp-assets/imgIcon4.svg" alt="" />
+                  <img src="pcp-assets/imgIcon4.svg" alt="" />
+                  <img src="pcp-assets/imgIcon4.svg" alt="" />
+                  <img src="pcp-assets/imgIcon4.svg" alt="" />
+                  <img src="pcp-assets/imgIcon5.svg" alt="" />
+                </span>
+                <span class="pcp-rating-count">(171)</span>
+              </div>
+            </div>
+            <div class="pcp-hero-actions">
+              <button type="button" class="pcp-icon-btn" aria-label="Favorite">
+                <img src="pcp-assets/imgIcon6.svg" alt="" />
+              </button>
+              <button type="button" class="pcp-icon-btn" aria-label="Share">
+                <img src="pcp-assets/imgIcon7.svg" alt="" />
+              </button>
             </div>
           </div>
-          <div class="pcp-hero-actions">
-            <button type="button" class="pcp-icon-btn" aria-label="Favorite">
-              <img src="pcp-assets/imgIcon6.svg" alt="" />
-            </button>
-            <button type="button" class="pcp-icon-btn" aria-label="Share">
-              <img src="pcp-assets/imgIcon7.svg" alt="" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+        </section>
 
-  <main class="pcp-main">
-    <div class="pcp-col-left">
       <div id="pcp-builder-description" class="pcp-builder-description">
         <div data-pcp-builder-fallback>
       <p class="pcp-lede">
@@ -313,7 +310,8 @@
         </div>
       </div>
     </aside>
-  </main>
-  <script defer src="plan-creation-description.js?v=2"></script>
+    </main>
+  </div>
+  <script defer src="plan-creation-description.js?v=4"></script>
 </body>
 </html>

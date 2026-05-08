@@ -159,34 +159,32 @@
   height: 16px;
 }
 
-/* ---------- Hero ---------- */
-.pcp-hero {
+/* ---------- Stage / Hero ----------
+ * Per Figma: a 324px-tall dark backdrop sits behind the body content,
+ * starting just under the 81px sticky nav. The body itself starts with
+ * the 312x312 thumb + title block, which extends ~20px below the backdrop.
+ */
+.pcp-stage {
   position: relative;
-  min-height: 324px;
-  padding-bottom: 32px;
 }
 
 .pcp-hero-bg {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 324px;
   width: 100%;
-  height: 405px;
   object-fit: cover;
   z-index: 0;
-}
-
-.pcp-hero-inner {
-  position: relative;
-  z-index: 2;
-  max-width: 1262px;
-  margin: 0 auto;
-  padding: 32px 16px 0;
+  pointer-events: none;
 }
 
 .pcp-hero-row {
   display: flex;
   align-items: flex-end;
   gap: 24px;
+  width: 100%;
 }
 
 .pcp-hero-thumb {
@@ -274,25 +272,29 @@
 
 /* ---------- Main columns ---------- */
 .pcp-main {
+  position: relative;
+  z-index: 2;
   max-width: 1262px;
   margin: 0 auto;
-  padding: 0 16px 64px;
+  padding: 32px 16px 64px;
   display: flex;
   align-items: flex-start;
-  gap: 32px;
 }
 
 .pcp-col-left {
   flex: 1;
   min-width: 0;
   padding-right: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 
-/* Canvas blocks from Description Builder (same classes as styles.css canvas) */
+/* Canvas blocks from Description Builder — 40px gap between hydrated blocks */
 .pcp-builder-description {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 40px;
   max-width: 782px;
   min-width: 0;
 }
@@ -308,14 +310,16 @@
 .pcp-col-right {
   width: 400px;
   flex-shrink: 0;
+  padding-left: 16px;
+  padding-top: 0;
+  align-self: flex-start;
   position: sticky;
   top: 96px;
-  padding-top: 170px;
 }
 
-/* Typography blocks */
+/* Typography blocks — leading 24px per Figma; section gaps via margins */
 .pcp-lede {
-  margin: 0 0 32px;
+  margin: 0 0 56px;
   font-size: 16px;
   line-height: 24px;
   color: var(--pcp-text);
@@ -323,7 +327,7 @@
 }
 
 .pcp-section-heading {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
   line-height: 24px;
@@ -337,7 +341,7 @@
 }
 
 .pcp-rich p {
-  margin: 0 0 0;
+  margin: 0;
 }
 
 .pcp-rich a {
@@ -360,12 +364,13 @@
 }
 
 .pcp-rich ul.songs {
-  margin: 0;
+  margin: 24px 0 0;
   padding-left: 1.25rem;
 }
 
 .pcp-rich ul.songs li {
   margin-bottom: 0;
+  line-height: 24px;
 }
 
 .pcp-inline-heading {
@@ -522,23 +527,34 @@
 .pcp-venue-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
   align-items: flex-start;
   margin-top: 16px;
+  width: 100%;
+  max-width: 782px;
 }
 
 .pcp-venue-text {
-  flex: 1 1 280px;
-  min-width: 200px;
+  flex: 0 1 359px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .pcp-venue-text strong {
   display: block;
-  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.pcp-venue-text p {
+  margin: 0;
 }
 
 .pcp-gallery {
-  flex: 1 1 280px;
+  flex: 1 1 359px;
+  padding-left: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -547,7 +563,6 @@
 
 .pcp-gallery img {
   width: 100%;
-  max-width: 359px;
   height: 188px;
   object-fit: cover;
   border-radius: 8px;
@@ -581,24 +596,39 @@
   gap: 32px;
   margin-top: 32px;
   align-items: flex-start;
+  width: 100%;
 }
 
 .pcp-location-text {
-  flex: 1 1 280px;
+  flex: 1 1 240px;
+  min-width: 240px;
+}
+
+.pcp-location-map {
+  flex: 1 1 360px;
+  max-width: 455px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pcp-location .pcp-block-head {
+  margin-top: 0;
+  margin-bottom: 24px;
 }
 
 .pcp-location-text h3 {
   margin: 0 0 8px;
   font-size: 18px;
   font-weight: 600;
+  line-height: 25.2px;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.pcp-location-map {
-  flex: 0 1 455px;
-  border-radius: 8px;
-  overflow: hidden;
+.pcp-location-text p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
 }
 
 .pcp-location-map img {

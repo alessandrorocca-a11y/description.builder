@@ -199,7 +199,6 @@
       chk.classList.add('info-card-check');
       const sp = document.createElement('span');
       sp.className = 'info-card-feature-text';
-      sp.style.color = readableAccent;
       sp.textContent = line;
       li.appendChild(chk);
       li.appendChild(sp);
@@ -236,7 +235,14 @@
     wrap.appendChild(track);
 
     function syncNav() {
-      const max = track.scrollWidth - track.clientWidth;
+      const max = Math.max(0, track.scrollWidth - track.clientWidth);
+      const overflow = max > 2;
+      wrap.classList.toggle('block-info-cards--carousel-overflow', overflow);
+      if (!overflow) {
+        prev.disabled = false;
+        next.disabled = false;
+        return;
+      }
       prev.disabled = track.scrollLeft <= 1;
       next.disabled = track.scrollLeft >= max - 1;
     }
@@ -255,7 +261,20 @@
       scrollDir(1);
     });
     track.addEventListener('scroll', syncNav, { passive: true });
-    queueMicrotask(syncNav);
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => syncNav())
+        : null;
+    ro?.observe(track);
+    const bump = () => syncNav();
+    queueMicrotask(() => {
+      bump();
+      requestAnimationFrame(bump);
+    });
+    window.addEventListener('resize', bump);
+    track.querySelectorAll('img').forEach((img) => {
+      if (!img.complete) img.addEventListener('load', bump, { once: true });
+    });
     return wrap;
   }
 

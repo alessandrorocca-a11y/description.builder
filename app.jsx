@@ -37,6 +37,7 @@ const TABS_MAX = 6;
 const INFO_CARD_MAX = 6;
 /** Preview + picker default when `tabBarColor` is empty (matches `.block-tabs` CSS token). */
 const TABS_BAR_COLOR_DEFAULT_HEX = '#002737';
+const MOBILE_VIEWPORT_QUERY = '(max-width: 900px)';
 
 const IMAGE_GRID_DEFAULT_TITLE = 'What is included in the package';
 const IMAGE_GRID_DEFAULT_BODY =
@@ -66,11 +67,15 @@ const INFO_CARD_DEFAULT_BULLET_TEXT =
 /** Default ticket accent (matches `.block-info-card` `--ic-accent` in CSS). */
 const INFO_CARD_ACCENT_DEFAULT_HEX = '#e31b23';
 
-/** Preset accents — neutral slates, zinc, and stone (no saturated hues). */
-const INFO_CARD_ACCENT_PRESETS = ['#0f172a', '#1e293b', '#334155', '#3f3f46', '#57534e', '#64748b'];
+/**
+ * Shared preset accents inspired by common competitor/event-market palettes:
+ * red, deep blue, cobalt, teal, and purple.
+ */
+const SHARED_ACCENT_PRESETS = ['#e31b23', '#003087', '#0057ff', '#00a3a3', '#6f42c1'];
+const INFO_CARD_ACCENT_PRESETS = SHARED_ACCENT_PRESETS;
 
-/** Tab bar presets: built-in default first, then five neutrals (matches accent preset family). */
-const TABS_BAR_COLOR_PRESETS = [TABS_BAR_COLOR_DEFAULT_HEX, ...INFO_CARD_ACCENT_PRESETS.slice(0, 5)];
+/** Tabs keep product default first, then reuse the shared preset family. */
+const TABS_BAR_COLOR_PRESETS = [TABS_BAR_COLOR_DEFAULT_HEX, ...SHARED_ACCENT_PRESETS];
 
 function clamp255(n) {
   return Math.max(0, Math.min(255, Math.round(n)));
@@ -454,14 +459,22 @@ function InfoCardTile({ ic, bulletLines }) {
 /** Horizontal strip for 2+ cards: arrow navigation on desktop preview; swipe/scroll on mobile frame. */
 function InfoCardsCarousel({ cards }) {
   const trackRef = React.useRef(null);
+  const [hasOverflow, setHasOverflow] = React.useState(false);
   const [canPrev, setCanPrev] = React.useState(false);
-  const [canNext, setCanNext] = React.useState(true);
+  const [canNext, setCanNext] = React.useState(false);
 
   const syncNav = React.useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
     const max = scrollWidth - clientWidth;
+    const overflow = max > 2;
+    setHasOverflow(overflow);
+    if (!overflow) {
+      setCanPrev(false);
+      setCanNext(false);
+      return;
+    }
     setCanPrev(scrollLeft > 1);
     setCanNext(scrollLeft < max - 1);
   }, []);
@@ -481,8 +494,15 @@ function InfoCardsCarousel({ cards }) {
     el.addEventListener('scroll', syncNav, { passive: true });
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncNav) : null;
     ro?.observe(el);
+    const onResize = () => syncNav();
+    window.addEventListener('resize', onResize);
+    const imgs = el.querySelectorAll('img');
+    imgs.forEach((img) => {
+      if (!img.complete) img.addEventListener('load', onResize, { once: true });
+    });
     return () => {
       el.removeEventListener('scroll', syncNav);
+      window.removeEventListener('resize', onResize);
       ro?.disconnect();
     };
   }, [syncNav, cards.length]);
@@ -497,7 +517,9 @@ function InfoCardsCarousel({ cards }) {
   };
 
   return (
-    <div className="block-info-cards block-info-cards--carousel">
+    <div
+      className={`block-info-cards block-info-cards--carousel${hasOverflow ? ' block-info-cards--carousel-overflow' : ''}`}
+    >
       <button
         type="button"
         className="block-info-cards-nav block-info-cards-nav--prev"
@@ -886,11 +908,7 @@ function Properties({ block, onChange, onDelete }) {
       </>}
       {block.type === 'fullImage' && <>
         <div className="prop">
-          <label className="prop-label">Image URL</label>
-          <input type="text" placeholder="https://..." value={block.props.src} onChange={e=>set('src', e.target.value)} />
-        </div>
-        <div className="prop">
-          <label className="prop-label">From your computer</label>
+          <label className="prop-label">Upload image</label>
           <FullImageLocalUpload
             previewUrl={block.props.src}
             onClear={() => set('src', '')}
@@ -904,7 +922,10 @@ function Properties({ block, onChange, onDelete }) {
         const item = gridItems[i];
         return <>
           <div className="prop">
-            <label className="prop-label">Card</label>
+            <div className="prop-tabs-section-head-text">
+              <span className="prop-tabs-section-eyebrow">Card content</span>
+              <h4 className="prop-tabs-section-heading">Card {i + 1}</h4>
+            </div>
             <div className="prop-segment prop-image-grid-card-tabs" role="tablist" aria-label="Image grid card">
               {[0, 1, 2, 3].map((idx) => (
                 <button
@@ -921,21 +942,6 @@ function Properties({ block, onChange, onDelete }) {
             </div>
           </div>
           <div className="prop-image-grid-section">
-            <div className="prop-label prop-image-grid-section-label">Card {i + 1}</div>
-            <div className="prop">
-              <label className="prop-label">Image URL</label>
-              <input
-                type="text"
-                placeholder="https://..."
-                value={item.src}
-                onChange={(e) => {
-                  const next = normalizeImageGridProps(block.props).map((row, j) =>
-                    j === i ? { ...row, src: e.target.value } : row
-                  );
-                  set('items', next);
-                }}
-              />
-            </div>
             <div className="prop">
               <label className="prop-label">Upload image</label>
               <FullImageLocalUpload
@@ -1296,6 +1302,12 @@ function Properties({ block, onChange, onDelete }) {
                   className="prop-accent-picker"
                   value={normalizeAccentHex(tabsBarEffectiveHex, TABS_BAR_COLOR_DEFAULT_HEX)}
                   aria-label="Choose tab bar color"
+                  onFocus={() =>
+                    set(
+                      'tabBarColor',
+                      normalizeAccentHex(tabsBarEffectiveHex, TABS_BAR_COLOR_DEFAULT_HEX)
+                    )
+                  }
                   onChange={(e) => set('tabBarColor', e.target.value.toLowerCase())}
                 />
               </div>
@@ -1482,7 +1494,7 @@ function Properties({ block, onChange, onDelete }) {
 function App() {
   const [tweaks, setTweak] = useTweaks(TWEAKS_DEFAULTS);
   const [activeTab, setActiveTab] = React.useState('Content');
-  const [device, setDevice] = React.useState('desktop');
+  const [device] = React.useState('desktop');
   const [eventTitle, setEventTitle] = React.useState('Pizza in Piazza');
   const [blocks, setBlocks] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState(null);
@@ -1491,6 +1503,15 @@ function App() {
   const [draggingType, setDraggingType] = React.useState(null);
   const [draggingBlockId, setDraggingBlockId] = React.useState(null);
   const [pickerIndex, setPickerIndex] = React.useState(null);
+  const [isMobileViewport, setIsMobileViewport] = React.useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_VIEWPORT_QUERY).matches : false
+  );
+  const [mobileSheet, setMobileSheet] = React.useState({
+    open: false,
+    mode: 'picker',
+    insertAtIndex: 0,
+  });
+  const prevSelectedIdRef = React.useRef(null);
   /** Latest insert index during canvas dragover (avoids stale state if dragend fires before drop). */
   const lastCanvasDropIndexRef = React.useRef(-1);
 
@@ -1508,8 +1529,33 @@ function App() {
     if (blocks.length === 0 && pickerIndex === PICKER_TRAILING) setPickerIndex(null);
   }, [blocks.length, pickerIndex]);
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const onChange = (e) => setIsMobileViewport(e.matches);
+    setIsMobileViewport(media.matches);
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
+
   const selected = blocks.find(b => b.id === selectedId);
   const layoutVariant = tweaks.layoutVariant;
+
+  const closeMobileSheet = React.useCallback(() => {
+    setMobileSheet((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const openMobilePicker = React.useCallback((insertAtIndex) => {
+    setMobileSheet({
+      open: true,
+      mode: 'picker',
+      insertAtIndex: Number.isFinite(insertAtIndex) ? Math.max(0, insertAtIndex) : 0,
+    });
+  }, []);
 
   const addBlock = (type, atIndex) => {
     const newBlock = { id: uid(), type, props: defaultProps(type) };
@@ -1520,6 +1566,12 @@ function App() {
       return next;
     });
     setSelectedId(newBlock.id);
+  };
+
+  const handleMobileAddBlock = (type) => {
+    addBlock(type, mobileSheet.insertAtIndex);
+    setPickerIndex(null);
+    setMobileSheet((prev) => ({ ...prev, open: true, mode: 'properties' }));
   };
 
   const updateBlock = (id, props) => {
@@ -1628,8 +1680,31 @@ function App() {
 
   const builderClass = `builder ${layoutVariant === 'floating-toolbar' ? 'floating-tools' : ''} ${layoutVariant === 'inline-plus' ? 'inline-plus' : ''}`;
 
+  React.useEffect(() => {
+    if (!isMobileViewport) closeMobileSheet();
+  }, [isMobileViewport, closeMobileSheet]);
+
+  React.useEffect(() => {
+    if (!mobileSheet.open) return;
+    if (mobileSheet.mode === 'properties' && !selected) {
+      closeMobileSheet();
+    }
+  }, [mobileSheet.open, mobileSheet.mode, selected, closeMobileSheet]);
+
+  React.useEffect(() => {
+    const prev = prevSelectedIdRef.current;
+    if (
+      isMobileViewport &&
+      selectedId &&
+      selectedId !== prev
+    ) {
+      setMobileSheet((sheet) => ({ ...sheet, open: true, mode: 'properties' }));
+    }
+    prevSelectedIdRef.current = selectedId;
+  }, [isMobileViewport, selectedId]);
+
   return (
-    <div className="app" onClick={()=>setSelectedId(null)}>
+    <div className={`app ${isMobileViewport ? 'app-mobile-builder' : ''}`} onClick={()=>setSelectedId(null)}>
       <Topbar />
       <Sidebar />
       <main className="main">
@@ -1657,67 +1732,61 @@ function App() {
           <div className="field">
             <label className="field-label">Event description</label>
             <p className="field-help">The "description" section should be written in your local language. Please use respectful language suitable for all audiences. Compose the description with elements to fully customise your page.</p>
+            <a
+              className="preview-on-link"
+              href={PRODUCT_PAGE_PREVIEW_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+                try {
+                  localStorage.setItem(
+                    'descriptionBuilderPlanPreview',
+                    JSON.stringify({
+                      v: 1,
+                      eventTitle,
+                      blocks,
+                      savedAt: Date.now(),
+                    })
+                  );
+                } catch (err) {
+                  console.warn('Preview: could not store canvas state', err);
+                }
+              }}
+            >
+              Preview on Fever <span className="ms material-symbols-outlined" style={{fontSize:14}}>open_in_new</span>
+            </a>
 
             <div className={builderClass}>
-              <div className="palette" onClick={e=>e.stopPropagation()}>
-                <div className="palette-title">Components</div>
-                <div className="palette-sub">Drag onto the description</div>
-                <div className="palette-list">
-                  {PALETTE_ORDER.map(type => {
-                    const t = COMPONENT_TYPES[type];
-                    return (
-                      <div
-                        key={type}
-                        className="palette-item"
-                        draggable
-                        onDragStart={(e)=>handlePaletteDragStart(e, type)}
-                        onDragEnd={()=>setDraggingType(null)}
-                        onDoubleClick={()=>addBlock(type)}
-                        title="Drag onto canvas, or double-click to add"
-                      >
-                        <span className="ms material-symbols-outlined">{t.icon}</span>
-                        {t.label}
-                      </div>
-                    );
-                  })}
-                </div>
-                <a
-                  className="preview-on-link"
-                  href={PRODUCT_PAGE_PREVIEW_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    try {
-                      localStorage.setItem(
-                        'descriptionBuilderPlanPreview',
-                        JSON.stringify({
-                          v: 1,
-                          eventTitle,
-                          blocks,
-                          savedAt: Date.now(),
-                        })
+              <div className="builder-left">
+                <div className="palette" onClick={e=>e.stopPropagation()}>
+                  <div className="palette-title">Components</div>
+                  <div className="palette-sub">Drag onto description or double-click it</div>
+                  <div className="palette-list">
+                    {PALETTE_ORDER.map(type => {
+                      const t = COMPONENT_TYPES[type];
+                      return (
+                        <div
+                          key={type}
+                          className="palette-item"
+                          draggable
+                          onDragStart={(e)=>handlePaletteDragStart(e, type)}
+                          onDragEnd={()=>setDraggingType(null)}
+                          onDoubleClick={()=>addBlock(type)}
+                          title="Drag onto canvas, or double-click to add"
+                        >
+                          <span className="ms material-symbols-outlined">{t.icon}</span>
+                          {t.label}
+                        </div>
                       );
-                    } catch (err) {
-                      console.warn('Preview: could not store canvas state', err);
-                    }
-                  }}
-                >
-                  Preview on <span className="ms material-symbols-outlined" style={{fontSize:14}}>open_in_new</span>
-                </a>
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="canvas-wrap" onClick={e=>e.stopPropagation()}>
                 <div className="canvas-header">
                   <div className="canvas-title">Preview</div>
-                  <div className="device-toggle">
-                    <button className={device==='desktop'?'active':''} onClick={()=>setDevice('desktop')}>
-                      <span className="ms material-symbols-outlined">desktop_windows</span>Desktop
-                    </button>
-                    <button className={device==='mobile'?'active':''} onClick={()=>setDevice('mobile')}>
-                      <span className="ms material-symbols-outlined">smartphone</span>Mobile
-                    </button>
-                  </div>
                 </div>
                 <div
                   className={`canvas ${dragOver?'drag-over':''} ${device==='mobile'?'mobile':''}`}
@@ -1741,6 +1810,8 @@ function App() {
                         patchBlockProps={patchBlockProps}
                         onBlockDragStart={handleBlockDragStart}
                         onBlockDragEnd={handleBlockDragEnd}
+                        isMobileViewport={isMobileViewport}
+                        onOpenMobilePicker={openMobilePicker}
                       />
                     </div>
                   ) : (
@@ -1758,16 +1829,18 @@ function App() {
                       patchBlockProps={patchBlockProps}
                       onBlockDragStart={handleBlockDragStart}
                       onBlockDragEnd={handleBlockDragEnd}
+                      isMobileViewport={isMobileViewport}
+                      onOpenMobilePicker={openMobilePicker}
                     />
                   )}
                 </div>
               </div>
 
-              {layoutVariant !== 'floating-toolbar' && (
+              {!isMobileViewport && layoutVariant !== 'floating-toolbar' && (
                 <Properties
                   block={selected}
-                  onChange={(props)=>updateBlock(selected.id, props)}
-                  onDelete={()=>deleteBlock(selected.id)}
+                  onChange={(props)=>selected && updateBlock(selected.id, props)}
+                  onDelete={()=>selected && deleteBlock(selected.id)}
                 />
               )}
             </div>
@@ -1782,6 +1855,56 @@ function App() {
           </button>
         </div>
       </main>
+
+      {isMobileViewport && mobileSheet.open && (
+        <div className="mobile-sheet-overlay" onClick={closeMobileSheet}>
+          <div className="mobile-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-handle" />
+            {mobileSheet.mode === 'picker' ? (
+              <>
+                <div className="mobile-sheet-title-row">
+                  <div className="mobile-sheet-title">Add component</div>
+                  <button type="button" className="mobile-sheet-close" onClick={closeMobileSheet} aria-label="Close">
+                    <span className="ms material-symbols-outlined">close</span>
+                  </button>
+                </div>
+                <div className="mobile-sheet-list" role="listbox" aria-label="Components">
+                  {PALETTE_ORDER.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      role="option"
+                      className="mobile-sheet-option"
+                      onClick={() => handleMobileAddBlock(type)}
+                    >
+                      <span className="ms material-symbols-outlined">{COMPONENT_TYPES[type].icon}</span>
+                      {COMPONENT_TYPES[type].label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mobile-sheet-properties">
+                <div className="mobile-sheet-title-row">
+                  <div className="mobile-sheet-title">Properties</div>
+                  <button type="button" className="mobile-sheet-close" onClick={closeMobileSheet} aria-label="Close">
+                    <span className="ms material-symbols-outlined">close</span>
+                  </button>
+                </div>
+                <Properties
+                  block={selected}
+                  onChange={(props)=>selected && updateBlock(selected.id, props)}
+                  onDelete={()=>{
+                    if (!selected) return;
+                    deleteBlock(selected.id);
+                    closeMobileSheet();
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <TweaksPanel title="Tweaks">
         <TweakSection title="Editor layout">
@@ -1813,7 +1936,7 @@ function App() {
   );
 }
 
-function CanvasEmptyPlusWrap({ insertAtIndex, isOpen, onToggleOpen, addBlock, setPickerIndex }) {
+function CanvasEmptyPlusWrap({ insertAtIndex, isOpen, onToggleOpen, addBlock, setPickerIndex, isMobileViewport, onOpenMobilePicker }) {
   return (
     <div className="canvas-empty-plus-wrap">
       <button
@@ -1824,12 +1947,16 @@ function CanvasEmptyPlusWrap({ insertAtIndex, isOpen, onToggleOpen, addBlock, se
         aria-label="Add component"
         onClick={(e) => {
           e.stopPropagation();
+          if (isMobileViewport) {
+            onOpenMobilePicker?.(insertAtIndex);
+            return;
+          }
           onToggleOpen();
         }}
       >
         <span className="ms material-symbols-outlined">add</span>
       </button>
-      {isOpen && (
+      {!isMobileViewport && isOpen && (
         <div
           className="inline-picker open canvas-empty-picker"
           role="listbox"
@@ -1855,7 +1982,7 @@ function CanvasEmptyPlusWrap({ insertAtIndex, isOpen, onToggleOpen, addBlock, se
   );
 }
 
-function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock, dragOverIndex, layoutVariant, addBlock, pickerIndex, setPickerIndex, patchBlockProps, onBlockDragStart, onBlockDragEnd }) {
+function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock, dragOverIndex, layoutVariant, addBlock, pickerIndex, setPickerIndex, patchBlockProps, onBlockDragStart, onBlockDragEnd, isMobileViewport, onOpenMobilePicker }) {
   if (blocks.length === 0 && dragOverIndex < 0) {
     const emptyPickerOpen = pickerIndex === PICKER_EMPTY;
     return (
@@ -1866,6 +1993,8 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
           onToggleOpen={() => setPickerIndex(emptyPickerOpen ? null : PICKER_EMPTY)}
           addBlock={addBlock}
           setPickerIndex={setPickerIndex}
+          isMobileViewport={isMobileViewport}
+          onOpenMobilePicker={onOpenMobilePicker}
         />
         <div>Drag a component here, double-click one in the palette, or use + to choose</div>
       </div>
@@ -1879,10 +2008,19 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
     if (layoutVariant === 'inline-plus' && i < blocks.length) {
       items.push(
         <div key={`ins-${i}`} className="inline-inserter">
-          <button onClick={(e)=>{ e.stopPropagation(); setPickerIndex(pickerIndex===i?null:i); }}>
+          <button
+            onClick={(e)=>{
+              e.stopPropagation();
+              if (isMobileViewport) {
+                onOpenMobilePicker?.(i);
+                return;
+              }
+              setPickerIndex(pickerIndex===i?null:i);
+            }}
+          >
             <span className="ms material-symbols-outlined">add</span>
           </button>
-          {pickerIndex === i && (
+          {!isMobileViewport && pickerIndex === i && (
             <div className="inline-picker open" onClick={e=>e.stopPropagation()}>
               {PALETTE_ORDER.map(type => (
                 <button key={type} onClick={()=>{ addBlock(type, i); setPickerIndex(null); }}>
@@ -1924,6 +2062,8 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
           onToggleOpen={() => setPickerIndex(trailingOpen ? null : PICKER_TRAILING)}
           addBlock={addBlock}
           setPickerIndex={setPickerIndex}
+          isMobileViewport={isMobileViewport}
+          onOpenMobilePicker={onOpenMobilePicker}
         />
       </div>
     );
