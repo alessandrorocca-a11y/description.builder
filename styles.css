@@ -1862,6 +1862,12 @@ input, textarea, select { font-family: inherit; }
     display: none !important;
   }
 
+  /* …but keep the properties panel visible when it is mounted inside the
+   * mobile sheet (otherwise the sheet shows only its title row). */
+  .app-mobile-builder .mobile-sheet-properties .properties {
+    display: block !important;
+  }
+
   .app-mobile-builder .canvas-wrap {
     min-height: 500px;
   }
