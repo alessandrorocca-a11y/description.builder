@@ -299,6 +299,20 @@
   min-width: 0;
 }
 
+/* Some builder blocks ship with negative margins meant for the editor canvas
+ * (which has horizontal padding). On the product page they would steal vertical
+ * space from the 40px gap and extend past the container — neutralize them. */
+.pcp-builder-description > .block-info-cards {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Title blocks have a tighter 16px gap to the next block (vs. the default 40px) */
+.pcp-builder-description > h2.block-title-h2:not(:last-child) {
+  margin: 0 0 -24px;
+}
+
 .pcp-builder-description .block-paragraph:first-child {
   margin-top: 0;
 }
