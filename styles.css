@@ -477,8 +477,7 @@ input, textarea, select { font-family: inherit; }
 .translation-figma-save-top--flash {
   box-shadow: 0 0 0 3px rgba(0, 158, 224, 0.35);
 }
-/* Plan Creation node 4364:7089 — two language cards + target picker */
-/* Match translation field columns: 50/50 + 12px gutter + same horizontal inset as .translation-figma-field */
+/* Plan Creation node 4364:7089 — two language cards + target picker (50/50 + 12px gutter) */
 .translation-figma-lang-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -486,7 +485,7 @@ input, textarea, select { font-family: inherit; }
   align-items: stretch;
   box-sizing: border-box;
   width: 100%;
-  padding: 0 16px;
+  padding: 0;
   min-width: 0;
 }
 .translation-figma-lang-card {
