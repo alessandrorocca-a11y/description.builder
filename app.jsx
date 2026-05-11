@@ -272,6 +272,731 @@ function createDefaultTab(atIndex) {
 // uuid helper
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+/** Master locale: canonical content in `block.props`; overlays per locale in `block.i18n`. */
+const SOURCE_LOCALE = 'en';
+
+/** Locales shown in the translation preview + editor. */
+const TRANSLATION_LOCALE_OPTIONS = [
+  { code: 'en', label: 'English (master)' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+];
+
+/** Merge one row object; empty strings on overlay skip → keep master (fallback). */
+function mergeLocaleRow(baseRow, overlayRow) {
+  if (!overlayRow || typeof overlayRow !== 'object') return baseRow;
+  const out = { ...baseRow };
+  for (const [k, v] of Object.entries(overlayRow)) {
+    if (v === '' || v === undefined) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Merge translated overlay onto base props (same shape as `block.props`).
+ * Empty string in overlay means “not translated yet” → use master copy.
+ */
+function mergePropsLocaleOverlay(baseProps, overlay) {
+  if (!overlay || typeof overlay !== 'object') return baseProps;
+  const base = baseProps || {};
+  const out = { ...base };
+  for (const [k, v] of Object.entries(overlay)) {
+    if (v === '' || v === undefined) continue;
+    if (
+      k !== 'items' &&
+      k !== 'cards' &&
+      k !== 'tabs' &&
+      k !== 'details' &&
+      v !== null &&
+      typeof v !== 'object'
+    ) {
+      out[k] = v;
+    }
+  }
+  if (Array.isArray(base.items) && overlay.items) {
+    out.items = base.items.map((row, i) => mergeLocaleRow(row || {}, overlay.items[i] || {}));
+  }
+  if (Array.isArray(base.cards) && overlay.cards) {
+    out.cards = base.cards.map((row, i) => mergeLocaleRow(row || {}, overlay.cards[i] || {}));
+  }
+  if (Array.isArray(base.tabs) && overlay.tabs) {
+    out.tabs = base.tabs.map((row, i) => mergeLocaleRow(row || {}, overlay.tabs[i] || {}));
+  }
+  if (Array.isArray(base.details) && overlay.details) {
+    out.details = base.details.map((row, i) => mergeLocaleRow(row || {}, overlay.details[i] || {}));
+  }
+  return out;
+}
+
+/** Merge a new patch into an existing locale overlay (stored on `block.i18n[locale]`). */
+function mergeI18nDelta(existingOverlay, patch) {
+  if (!patch || typeof patch !== 'object') return existingOverlay || {};
+  const ex = existingOverlay || {};
+  const out = { ...ex, ...patch };
+  const mergeArr = (key) => {
+    if (!patch[key] || !Array.isArray(patch[key])) return;
+    const exA = ex[key] || [];
+    const pA = patch[key];
+    const max = Math.max(exA.length, pA.length);
+    const merged = [];
+    for (let i = 0; i < max; i++) {
+      const er = exA[i];
+      const pr = pA[i];
+      if (pr === undefined && er === undefined) continue;
+      merged[i] = { ...(er || {}), ...(pr || {}) };
+    }
+    out[key] = merged;
+  };
+  mergeArr('items');
+  mergeArr('cards');
+  mergeArr('tabs');
+  mergeArr('details');
+  return out;
+}
+
+function resolveLocalizedProps(block, locale = SOURCE_LOCALE) {
+  if (!block?.props) return {};
+  if (locale === SOURCE_LOCALE) return block.props;
+  const overlay = block.i18n && block.i18n[locale];
+  if (!overlay) return block.props;
+  return mergePropsLocaleOverlay(block.props, overlay);
+}
+
+function resolveLocalizedEventTitle(masterTitle, byLocale, locale) {
+  if (locale === SOURCE_LOCALE) return masterTitle;
+  const t = byLocale && byLocale[locale];
+  if (typeof t === 'string' && t.trim()) return t;
+  return masterTitle;
+}
+
+/** Read a string leaf stored only in the locale overlay (not merged). */
+function readOverlayLeaf(overlay, pathSegments) {
+  let cur = overlay;
+  for (const seg of pathSegments) {
+    if (cur == null) return '';
+    cur = cur[seg];
+  }
+  return typeof cur === 'string' ? cur : '';
+}
+
+function pruneEmptyOverlayLeaves(o) {
+  if (!o || typeof o !== 'object') return o;
+  if (Array.isArray(o)) return o.map((item) => pruneEmptyOverlayLeaves(item));
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === '') continue;
+    if (v && typeof v === 'object') out[k] = pruneEmptyOverlayLeaves(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Build flat rows for side‑by‑side translation (Figma-style).
+ * `targetText` is overlay-only; empty means fallback to English in preview.
+ */
+function collectTranslationRows(block, locale) {
+  const rows = [];
+  const master = block.props || {};
+  const overlay = (block.i18n && block.i18n[locale]) || {};
+
+  const push = (rowId, fieldLabel, sourceText, targetText, multiline = false) => {
+    rows.push({
+      rowId: `${block.id}:${rowId}`,
+      fieldLabel,
+      sourceText: sourceText == null ? '' : String(sourceText),
+      targetText: targetText == null ? '' : String(targetText),
+      multiline,
+    });
+  };
+
+  if (block.type === 'title') {
+    push('text', 'Text', master.text, readOverlayLeaf(overlay, ['text']), false);
+  } else if (block.type === 'paragraph') {
+    push('text', 'Text', master.text, readOverlayLeaf(overlay, ['text']), true);
+  } else if (block.type === 'fullImage') {
+    push('alt', 'Alt text', master.alt ?? '', readOverlayLeaf(overlay, ['alt']), false);
+  } else if (block.type === 'imageGrid') {
+    const items = normalizeImageGridProps(master);
+    items.forEach((item, i) => {
+      push(`items.${i}.title`, `Card ${i + 1} · Title`, item.title, readOverlayLeaf(overlay, ['items', i, 'title']), false);
+      push(`items.${i}.body`, `Card ${i + 1} · Body`, item.body, readOverlayLeaf(overlay, ['items', i, 'body']), true);
+    });
+  } else if (block.type === 'eventDetails') {
+    if (Array.isArray(master.details) && master.heading === undefined && master.promo === undefined) {
+      master.details.forEach((d, i) => {
+        push(`details.${i}.sub`, `${d.title || 'Field'} · value`, d.sub, readOverlayLeaf(overlay, ['details', i, 'sub']), false);
+      });
+    } else {
+      push('heading', 'Section heading', master.heading ?? '', readOverlayLeaf(overlay, ['heading']), false);
+      push('locationLine', 'Location line', master.locationLine ?? '', readOverlayLeaf(overlay, ['locationLine']), false);
+      push('datesLine', 'Dates line', master.datesLine ?? '', readOverlayLeaf(overlay, ['datesLine']), false);
+      push('promo', 'Promotional text', master.promo ?? '', readOverlayLeaf(overlay, ['promo']), true);
+    }
+  } else if (block.type === 'infoCard') {
+    const { cards } = normalizeInfoCardProps(master);
+    cards.forEach((c, i) => {
+      push(`cards.${i}.heading`, `Card ${i + 1} · Heading`, c.heading, readOverlayLeaf(overlay, ['cards', i, 'heading']), false);
+      push(`cards.${i}.price`, `Card ${i + 1} · Price`, c.price ?? '', readOverlayLeaf(overlay, ['cards', i, 'price']), false);
+      push(`cards.${i}.ctaLabel`, `Card ${i + 1} · Button label`, c.ctaLabel ?? '', readOverlayLeaf(overlay, ['cards', i, 'ctaLabel']), false);
+      push(`cards.${i}.badge`, `Card ${i + 1} · Badge`, c.badge ?? '', readOverlayLeaf(overlay, ['cards', i, 'badge']), false);
+      push(`cards.${i}.bulletPointsText`, `Card ${i + 1} · Bullet points`, c.bulletPointsText ?? '', readOverlayLeaf(overlay, ['cards', i, 'bulletPointsText']), true);
+    });
+  } else if (block.type === 'tabs') {
+    const tabs = normalizeTabsProps(master);
+    tabs.forEach((tab, i) => {
+      push(`tabs.${i}.label`, `Tab ${i + 1} · Label`, tab.label, readOverlayLeaf(overlay, ['tabs', i, 'label']), false);
+      push(`tabs.${i}.contentTitle`, `Tab ${i + 1} · Section heading`, tab.contentTitle ?? '', readOverlayLeaf(overlay, ['tabs', i, 'contentTitle']), false);
+      push(`tabs.${i}.body`, `Tab ${i + 1} · Body`, tab.body, readOverlayLeaf(overlay, ['tabs', i, 'body']), true);
+    });
+  }
+
+  return rows;
+}
+
+/** Apply one target field change (stores overlay-only strings; empty removes override). */
+function applyTranslationRowChange(block, locale, leafKey, newValue, patchBlockI18n) {
+  const patch = {};
+  const parts = leafKey.split('.');
+  const master = block.props || {};
+  if (parts[0] === 'text' && parts.length === 1) {
+    patch.text = newValue;
+  } else if (parts[0] === 'alt') {
+    patch.alt = newValue;
+  } else if (parts[0] === 'items') {
+    const idx = parseInt(parts[1], 10);
+    const field = parts[2];
+    const masterItems = normalizeImageGridProps(master);
+    const ov = block.i18n?.[locale] || {};
+    const ovItems = [...(ov.items || [])];
+    while (ovItems.length < masterItems.length) ovItems.push({});
+    patch.items = masterItems.map((row, j) => {
+      const prev = ovItems[j] || {};
+      if (j !== idx) return prev;
+      return { ...prev, [field]: newValue };
+    });
+  } else if (parts[0] === 'details') {
+    const idx = parseInt(parts[1], 10);
+    const baseDetails = master.details || [];
+    const ov = block.i18n?.[locale] || {};
+    const ovDetails = [...(ov.details || [])];
+    while (ovDetails.length < baseDetails.length) ovDetails.push({});
+    const merged = baseDetails.map((row, j) => {
+      const prev = ovDetails[j] || {};
+      if (j !== idx) return prev;
+      return { ...prev, sub: newValue };
+    });
+    patch.details = merged;
+  } else if (parts[0] === 'cards') {
+    const idx = parseInt(parts[1], 10);
+    const field = parts[2];
+    const { cards } = normalizeInfoCardProps(master);
+    const ov = block.i18n?.[locale] || {};
+    const ovCards = [...(ov.cards || [])];
+    while (ovCards.length < cards.length) ovCards.push({});
+    const merged = cards.map((row, j) => {
+      const prev = ovCards[j] || {};
+      if (j !== idx) return prev;
+      return { ...prev, [field]: newValue };
+    });
+    patch.cards = merged;
+  } else if (parts[0] === 'tabs') {
+    const idx = parseInt(parts[1], 10);
+    const field = parts[2];
+    const tabsM = normalizeTabsProps(master);
+    const ov = block.i18n?.[locale] || {};
+    const ovTabs = [...(ov.tabs || [])];
+    while (ovTabs.length < tabsM.length) ovTabs.push({});
+    const merged = tabsM.map((row, j) => {
+      const prev = ovTabs[j] || {};
+      if (j !== idx) return prev;
+      return { ...prev, [field]: newValue };
+    });
+    patch.tabs = merged;
+  } else {
+    patch[parts[0]] = newValue;
+  }
+  patchBlockI18n(block.id, locale, pruneEmptyOverlayLeaves(patch));
+}
+
+function TranslationFigmaWorkspace({
+  locale,
+  onLocaleChange,
+  eventTitle,
+  eventTitleByLocale,
+  onLocaleTitleChange,
+  blocks,
+  patchBlockI18n,
+  childrenPreview,
+  selectedBlockId = null,
+  onSelectBlock,
+}) {
+  const [search, setSearch] = React.useState('');
+  const [untranslatedOnly, setUntranslatedOnly] = React.useState(false);
+  const [saveFlash, setSaveFlash] = React.useState(false);
+  const [openSections, setOpenSections] = React.useState(() => new Set());
+
+  React.useEffect(() => {
+    if (locale === SOURCE_LOCALE) return;
+    setOpenSections(new Set(['__event_content']));
+  }, [locale]);
+
+  React.useEffect(() => {
+    if (locale === SOURCE_LOCALE) return;
+    if (!selectedBlockId || !blocks.some((b) => b.id === selectedBlockId)) return;
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      next.add(selectedBlockId);
+      return next;
+    });
+  }, [locale, selectedBlockId, blocks.length]);
+
+  React.useEffect(() => {
+    if (locale === SOURCE_LOCALE) return;
+    if (!selectedBlockId || !blocks.some((b) => b.id === selectedBlockId)) return;
+    const sid = selectedBlockId;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const esc = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(sid) : sid.replace(/"/g, '\\"');
+        const el = document.querySelector(`[data-translation-section="${esc}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
+  }, [locale, selectedBlockId, blocks.length]);
+
+  const toggleSection = (id) => {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const eventRow = {
+    rowId: '__event:title',
+    fieldLabel: 'Event title',
+    sourceText: eventTitle,
+    targetText: locale === SOURCE_LOCALE ? eventTitle : (eventTitleByLocale[locale] ?? ''),
+    multiline: false,
+  };
+
+  const allRows = [];
+  if (locale !== SOURCE_LOCALE) {
+    allRows.push(eventRow);
+    blocks.forEach((block) => {
+      collectTranslationRows(block, locale).forEach((r) => {
+        allRows.push({ ...r, blockId: block.id, blockType: block.type });
+      });
+    });
+  }
+
+  const annotated = allRows.map((r) => {
+    const src = (r.sourceText || '').trim();
+    const tgt = (r.targetText || '').trim();
+    const needsWarning = !tgt || tgt === src;
+    return { ...r, needsWarning };
+  });
+
+  const filtered = annotated.filter((r) => {
+    if (untranslatedOnly && !r.needsWarning) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      r.fieldLabel.toLowerCase().includes(q) ||
+      r.sourceText.toLowerCase().includes(q) ||
+      r.targetText.toLowerCase().includes(q)
+    );
+  });
+
+  const total = annotated.length;
+  const done = annotated.filter((r) => !r.needsWarning).length;
+
+  const eventRowsFiltered =
+    locale !== SOURCE_LOCALE ? filtered.filter((r) => String(r.rowId).startsWith('__event:')) : [];
+  const evDone = eventRowsFiltered.filter((r) => !r.needsWarning).length;
+  const evTotal = eventRowsFiltered.length;
+  const eventTranslationRow =
+    locale !== SOURCE_LOCALE ? filtered.find((r) => r.rowId === '__event:title') : null;
+
+  const descriptionRowsAnnotated = annotated.filter((r) => r.blockId);
+  const descriptionNeedsWarning =
+    descriptionRowsAnnotated.length > 0 &&
+    descriptionRowsAnnotated.some((r) => r.needsWarning);
+
+  const handleTargetChange = (row, value) => {
+    if (row.rowId === '__event:title') {
+      onLocaleTitleChange(locale, value);
+      return;
+    }
+    const block = blocks.find((b) => b.id === row.blockId);
+    if (!block) return;
+    const c = row.rowId.indexOf(':');
+    const leafKey = c >= 0 ? row.rowId.slice(c + 1) : row.rowId;
+    applyTranslationRowChange(block, locale, leafKey, value, patchBlockI18n);
+  };
+
+  const onSaveClick = () => {
+    setSaveFlash(true);
+    window.setTimeout(() => setSaveFlash(false), 1800);
+  };
+
+  const openProductPreviewInNewTab = React.useCallback(() => {
+    try {
+      localStorage.setItem(
+        'descriptionBuilderPlanPreview',
+        JSON.stringify({
+          v: 1,
+          eventTitle,
+          eventTitleByLocale,
+          previewLocale: locale,
+          blocks,
+          savedAt: Date.now(),
+        })
+      );
+    } catch (err) {
+      console.warn('Preview: could not store canvas state', err);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = PRODUCT_PAGE_PREVIEW_URL;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.click();
+  }, [eventTitle, eventTitleByLocale, locale, blocks]);
+
+  return (
+    <div className="translation-figma-root">
+      <div className="translation-figma-workspace-top">
+        <div className="translation-figma-workspace-heading-row">
+          <div className="translation-figma-workspace-heading-text">
+            <p className="section-sub translation-figma-workspace-section-sub">
+              Translate event copy and description components for each language. Progress and warnings update as you edit.
+            </p>
+          </div>
+          <div className="translation-figma-workspace-actions">
+            <button
+              type="button"
+              className="btn btn-secondary translation-figma-preview-top"
+              onClick={openProductPreviewInNewTab}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              className={`btn btn-primary translation-figma-save-top ${saveFlash ? 'translation-figma-save-top--flash' : ''}`}
+              onClick={onSaveClick}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+        <div className="translation-figma-lang-columns">
+          <div className="translation-figma-lang-card translation-figma-lang-card--source">
+            <div className="translation-figma-lang-card-inner">
+              <span className="translation-figma-lang-card-title">English</span>
+              <span className="translation-figma-lang-pill translation-figma-lang-pill--default">Default</span>
+              <span className="ms material-symbols-outlined translation-figma-lang-card-chevron" aria-hidden>
+                expand_more
+              </span>
+            </div>
+          </div>
+          <div className="translation-figma-lang-card translation-figma-lang-card--target">
+            <label htmlFor="translation-target-select" className="sr-only">
+              Target language
+            </label>
+            <div className="translation-figma-lang-select-wrap">
+              <select
+                id="translation-target-select"
+                className="translation-figma-lang-select"
+                value={locale}
+                onChange={(e) => onLocaleChange(e.target.value)}
+              >
+                {TRANSLATION_LOCALE_OPTIONS.map((o) => (
+                  <option key={o.code} value={o.code}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <span className="ms material-symbols-outlined translation-figma-lang-select-chevron" aria-hidden>
+                expand_more
+              </span>
+            </div>
+            {locale !== SOURCE_LOCALE ? (
+              <div
+                className={`translation-figma-progress translation-figma-progress--card ${done < total ? 'translation-figma-progress--warn' : ''}`}
+              >
+                <span className="translation-figma-progress-count">
+                  <span className="translation-figma-progress-num">{done}</span>
+                  <span className="translation-figma-progress-slash">/</span>
+                  <span className="translation-figma-progress-num">{total}</span>
+                </span>
+                <span className="translation-figma-progress-rest"> translated</span>
+                <span className="ms material-symbols-outlined translation-figma-progress-warn-icon" aria-hidden>
+                  {done < total ? 'warning' : 'check_circle'}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="translation-figma-controls">
+        <div className="translation-figma-search">
+          <span className="ms material-symbols-outlined translation-figma-search-icon">search</span>
+          <input
+            type="search"
+            className="input translation-figma-search-input"
+            placeholder="Search content"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search translation fields"
+          />
+        </div>
+        <div className="translation-figma-toggle translation-figma-toggle--switch-row">
+          <button
+            type="button"
+            id="translation-untranslated-only-switch"
+            role="switch"
+            aria-checked={untranslatedOnly}
+            className={`translation-figma-switch ${untranslatedOnly ? 'translation-figma-switch--on' : ''}`}
+            onClick={() => setUntranslatedOnly((v) => !v)}
+          >
+            <span className="translation-figma-switch-thumb" aria-hidden />
+          </button>
+          <label className="translation-figma-toggle-text" htmlFor="translation-untranslated-only-switch">
+            Untranslated only
+          </label>
+        </div>
+      </div>
+
+      {locale === SOURCE_LOCALE ? (
+        <>
+          <p className="translation-figma-master-hint">
+            Select <strong>Spanish</strong>, <strong>French</strong>, or <strong>German</strong> to edit translations side‑by‑side with English. Master copy is edited on the <strong>Content</strong> tab.
+          </p>
+          <div className="translation-figma-main-split translation-figma-main-split--standalone">
+            <div className="translation-figma-preview-column" aria-label="Live preview">
+              <div className="translation-figma-preview-column-head">
+                <span className="translation-figma-preview-column-title">Preview</span>
+                <span className="translation-figma-preview-column-sub">Content builder layout, read-only</span>
+              </div>
+              <div
+                className="translation-figma-preview-slot translation-figma-preview-slot--direct"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'none';
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                }}
+              >
+                {childrenPreview}
+              </div>
+            </div>
+            <div className="translation-figma-editor-column" aria-label="Translation fields">
+              <div className="translation-figma-editor-placeholder">
+                <p>Choose a target language above to enter translations in this column.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="translation-figma-event-content-wrap">
+          <div className="translation-figma-section--event-content">
+            <button
+              type="button"
+              className="translation-figma-section-head"
+              onClick={() => toggleSection('__event_content')}
+              aria-expanded={openSections.has('__event_content')}
+            >
+              <span className="ms material-symbols-outlined translation-figma-chevron">
+                {openSections.has('__event_content') ? 'expand_less' : 'chevron_right'}
+              </span>
+              <span className="translation-figma-section-title">Event content</span>
+              <span
+                className={`translation-figma-section-meta ${
+                  evTotal === 0 || evDone < evTotal
+                    ? 'translation-figma-section-meta--warn'
+                    : 'translation-figma-section-meta--complete'
+                }`}
+              >
+                {evDone}/{evTotal} translated
+              </span>
+            </button>
+            {openSections.has('__event_content') ? (
+              <div className="translation-figma-event-content-body">
+                {eventTranslationRow ? (
+                  <>
+                    <TranslationFigmaFieldRow
+                      row={{ ...eventTranslationRow, fieldLabel: 'Title *', multiline: false }}
+                      needsWarning={
+                        !(eventTranslationRow.targetText || '').trim() ||
+                        (eventTranslationRow.targetText || '').trim() === (eventTranslationRow.sourceText || '').trim()
+                      }
+                      onChange={(v) => handleTargetChange(eventTranslationRow, v)}
+                      onFocusBlock={onSelectBlock}
+                    />
+                  </>
+                ) : null}
+                <div className="translation-figma-description-split-head">
+                  <div className="translation-figma-field-label-row">
+                    <span className="translation-figma-field-label">Description *</span>
+                    {descriptionNeedsWarning ? (
+                      <span className="translation-figma-warn-icon" title="Still matches English or empty">
+                        <span className="ms material-symbols-outlined">warning</span>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="translation-figma-main-split translation-figma-main-split--in-event">
+                  <div className="translation-figma-preview-column" aria-label="Live preview">
+                    <div
+                      className="translation-figma-preview-slot translation-figma-preview-slot--direct"
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'none';
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                      }}
+                    >
+                      {childrenPreview}
+                    </div>
+                  </div>
+
+                  <div className="translation-figma-editor-column" aria-label="Translation fields">
+                    <div className="translation-figma-editor-column-body">
+                      <div className="translation-figma-dual-wrap">
+                        {blocks.map((block, bi) => {
+                          const blockRows = filtered.filter((r) => r.blockId === block.id);
+                          if (blockRows.length === 0) return null;
+                          const t = COMPONENT_TYPES[block.type];
+                          const secDone = blockRows.filter((r) => !r.needsWarning).length;
+                          const secTotal = blockRows.length;
+                          return (
+                            <div key={block.id} className="translation-figma-section" data-translation-section={block.id}>
+                              <button
+                                type="button"
+                                className="translation-figma-section-head"
+                                onClick={() => toggleSection(block.id)}
+                                aria-expanded={openSections.has(block.id)}
+                              >
+                                <span className="ms material-symbols-outlined translation-figma-chevron">
+                                  {openSections.has(block.id) ? 'expand_less' : 'chevron_right'}
+                                </span>
+                                <span className="translation-figma-section-title">
+                                  <span className="ms material-symbols-outlined translation-figma-section-icon">{t.icon}</span>
+                                  {t.label}
+                                  <span className="translation-figma-section-idx"> · Block {bi + 1}</span>
+                                </span>
+                                <span
+                                  className={`translation-figma-section-meta ${
+                                    secDone < secTotal
+                                      ? 'translation-figma-section-meta--warn'
+                                      : 'translation-figma-section-meta--complete'
+                                  }`}
+                                >
+                                  {secDone}/{secTotal}
+                                </span>
+                              </button>
+                              {openSections.has(block.id)
+                                ? blockRows.map((row) => (
+                                    <TranslationFigmaFieldRow
+                                      key={row.rowId}
+                                      row={row}
+                                      needsWarning={row.needsWarning}
+                                      onChange={(v) => handleTargetChange(row, v)}
+                                      onFocusBlock={onSelectBlock}
+                                    />
+                                  ))
+                                : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TranslationFigmaFieldRow({ row, needsWarning, onChange, showFieldLabel = true, onFocusBlock }) {
+  const multiline = !!row.multiline;
+  const rows = multiline ? 5 : 1;
+  const syncPreviewSelection = () => {
+    if (row.blockId && onFocusBlock) onFocusBlock(row.blockId);
+  };
+  return (
+    <div className={`translation-figma-field${multiline ? '' : ' translation-figma-field--single-line'}`}>
+      {showFieldLabel ? (
+        <div className="translation-figma-field-label-row">
+          <span className="translation-figma-field-label">{row.fieldLabel}</span>
+          {needsWarning ? (
+            <span className="translation-figma-warn-icon" title="Still matches English or empty">
+              <span className="ms material-symbols-outlined">warning</span>
+            </span>
+          ) : null}
+        </div>
+      ) : needsWarning ? (
+        <div className="translation-figma-field-label-row translation-figma-field-label-row--icon-only">
+          <span className="translation-figma-warn-icon" title="Still matches English or empty">
+            <span className="ms material-symbols-outlined">warning</span>
+          </span>
+        </div>
+      ) : null}
+      <div className="translation-figma-field-cols">
+        <textarea
+          className="translation-figma-source"
+          readOnly
+          value={row.sourceText}
+          rows={rows}
+          onFocus={syncPreviewSelection}
+        />
+        {multiline ? (
+          <textarea
+            className="translation-figma-target"
+            value={row.targetText}
+            placeholder={row.sourceText}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={syncPreviewSelection}
+            rows={5}
+          />
+        ) : (
+          <input
+            type="text"
+            className="input translation-figma-target"
+            value={row.targetText}
+            placeholder={row.sourceText}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={syncPreviewSelection}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanTabEmptyState({ icon, headline, description }) {
+  return (
+    <div className="plan-tab-empty" role="status">
+      <span className="ms material-symbols-outlined plan-tab-empty-icon" aria-hidden>
+        {icon}
+      </span>
+      <p className="plan-tab-empty-headline">{headline}</p>
+      <p className="plan-tab-empty-text">{description}</p>
+    </div>
+  );
+}
+
 // ---------- Sidebar ----------
 function Sidebar() {
   return (
@@ -693,45 +1418,78 @@ function BlockContent({ block, onPatchProps }) {
 }
 
 // ---------- Block ----------
-function Block({ block, selected, onSelect, onDelete, onMoveUp, onMoveDown, layoutVariant, onPatchBlockProps, onBlockDragStart, onBlockDragEnd }) {
+function Block({
+  block,
+  displayProps,
+  selected,
+  onSelect,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  layoutVariant,
+  onPatchBlockProps,
+  onBlockDragStart,
+  onBlockDragEnd,
+  previewReadOnly,
+}) {
+  const renderBlock = displayProps ? { ...block, props: displayProps } : block;
+  const patchChain =
+    previewReadOnly || !onPatchBlockProps
+      ? undefined
+      : (patch) => onPatchBlockProps(block.id, patch);
   return (
     <div
-      className={`block ${selected?'selected':''} ${block.type==='spacer'?'block-spacer':''}`}
-      onClick={(e)=>{ e.stopPropagation(); onSelect(block.id); }}
+      className={`block ${selected ? 'selected' : ''} ${block.type === 'spacer' ? 'block-spacer' : ''}${previewReadOnly ? ' block--preview-readonly' : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(block.id);
+      }}
       data-block-id={block.id}
     >
-      <div
-        className="block-drag-handle"
-        draggable={!!onBlockDragStart}
-        onDragStart={(e) => {
-          e.stopPropagation();
-          onBlockDragStart?.(e, block.id);
-        }}
-        onDragEnd={() => onBlockDragEnd?.()}
-        title="Drag to reorder"
-      >
-        <span className="ms material-symbols-outlined">drag_indicator</span>
-      </div>
-      <BlockContent
-        block={block}
-        onPatchProps={onPatchBlockProps ? (patch) => onPatchBlockProps(block.id, patch) : undefined}
-      />
-      {layoutVariant === 'floating-toolbar' ? (
-        <div className="floating-toolbar" onClick={e=>e.stopPropagation()}>
-          <span style={{padding:'0 6px', fontSize:12, opacity:0.8}}>{COMPONENT_TYPES[block.type].label}</span>
-          <span className="sep"></span>
-          <button onClick={onMoveUp} title="Move up"><span className="ms material-symbols-outlined">arrow_upward</span></button>
-          <button onClick={onMoveDown} title="Move down"><span className="ms material-symbols-outlined">arrow_downward</span></button>
-          <span className="sep"></span>
-          <button onClick={onDelete} title="Delete"><span className="ms material-symbols-outlined">delete</span></button>
+      {!previewReadOnly ? (
+        <div
+          className="block-drag-handle"
+          draggable={!!onBlockDragStart}
+          onDragStart={(e) => {
+            e.stopPropagation();
+            onBlockDragStart?.(e, block.id);
+          }}
+          onDragEnd={() => onBlockDragEnd?.()}
+          title="Drag to reorder"
+        >
+          <span className="ms material-symbols-outlined">drag_indicator</span>
         </div>
-      ) : (
-        <div className="block-toolbar" onClick={e=>e.stopPropagation()}>
-          <button onClick={onMoveUp} title="Move up"><span className="ms material-symbols-outlined">arrow_upward</span></button>
-          <button onClick={onMoveDown} title="Move down"><span className="ms material-symbols-outlined">arrow_downward</span></button>
-          <button className="danger" onClick={onDelete} title="Delete"><span className="ms material-symbols-outlined">delete</span></button>
+      ) : null}
+      <BlockContent block={renderBlock} onPatchProps={patchChain} />
+      {!previewReadOnly && layoutVariant === 'floating-toolbar' ? (
+        <div className="floating-toolbar" onClick={(e) => e.stopPropagation()}>
+          <span style={{ padding: '0 6px', fontSize: 12, opacity: 0.8 }}>{COMPONENT_TYPES[block.type].label}</span>
+          <span className="sep"></span>
+          <button type="button" onClick={onMoveUp} title="Move up">
+            <span className="ms material-symbols-outlined">arrow_upward</span>
+          </button>
+          <button type="button" onClick={onMoveDown} title="Move down">
+            <span className="ms material-symbols-outlined">arrow_downward</span>
+          </button>
+          <span className="sep"></span>
+          <button type="button" onClick={onDelete} title="Delete">
+            <span className="ms material-symbols-outlined">delete</span>
+          </button>
         </div>
-      )}
+      ) : null}
+      {!previewReadOnly && layoutVariant !== 'floating-toolbar' ? (
+        <div className="block-toolbar" onClick={(e) => e.stopPropagation()}>
+          <button type="button" onClick={onMoveUp} title="Move up">
+            <span className="ms material-symbols-outlined">arrow_upward</span>
+          </button>
+          <button type="button" onClick={onMoveDown} title="Move down">
+            <span className="ms material-symbols-outlined">arrow_downward</span>
+          </button>
+          <button type="button" className="danger" onClick={onDelete} title="Delete">
+            <span className="ms material-symbols-outlined">delete</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -837,7 +1595,7 @@ function FullImageLocalUpload({ onDataUrl, previewUrl, onClear }) {
 }
 
 // ---------- Properties panel ----------
-function Properties({ block, onChange, onDelete }) {
+function Properties({ block, onDelete, editLocale = SOURCE_LOCALE, onPatch, onReplaceProps, structureLocked = false }) {
   const [imageGridCardTab, setImageGridCardTab] = React.useState(0);
   const [infoCardTab, setInfoCardTab] = React.useState(0);
   React.useEffect(() => {
@@ -867,7 +1625,10 @@ function Properties({ block, onChange, onDelete }) {
       </aside>
     );
   }
-  const set = (k,v) => onChange({ ...block.props, [k]: v });
+  const props = resolveLocalizedProps(block, editLocale);
+  const masterProps = block.props;
+  const set = (k, v) => onPatch({ [k]: v });
+  const replaceAllProps = (next) => onReplaceProps(next);
   const t = COMPONENT_TYPES[block.type];
   return (
     <aside className="properties" onClick={(e) => e.stopPropagation()}>
@@ -876,50 +1637,68 @@ function Properties({ block, onChange, onDelete }) {
         {t.label}
       </div>
       <div className="properties-sub">Customise this component</div>
+      {structureLocked ? (
+        <div className="properties-i18n-hint">
+          Layout and images use the English (master) version. Edit text below for this language only.
+        </div>
+      ) : null}
       {block.type === 'title' && <>
+        {!structureLocked ? (
         <div className="prop">
           <label className="prop-label">Heading level</label>
           <div className="prop-segment">
             {['h1','h2','h3'].map(l => (
-              <button key={l} className={block.props.level===l?'active':''} onClick={()=>set('level',l)}>{l.toUpperCase()}</button>
+              <button key={l} className={masterProps.level===l?'active':''} onClick={()=>set('level',l)}>{l.toUpperCase()}</button>
             ))}
           </div>
         </div>
+        ) : null}
         <div className="prop">
           <label className="prop-label">Text</label>
-          <input type="text" value={block.props.text} onChange={e=>set('text', e.target.value)} />
+          <input type="text" value={props.text ?? ''} onChange={e=>set('text', e.target.value)} />
         </div>
       </>}
       {block.type === 'paragraph' && <>
         <div className="prop">
           <label className="prop-label">Text</label>
-          <textarea value={block.props.text} onChange={e=>set('text', e.target.value)} />
-          <div style={{fontSize:11, color:'var(--fg-3)', marginTop:4}}>{block.props.text.length} / 600 characters</div>
+          <textarea value={props.text ?? ''} onChange={e=>set('text', e.target.value)} />
+          <div style={{fontSize:11, color:'var(--fg-3)', marginTop:4}}>{(props.text ?? '').length} / 600 characters</div>
         </div>
       </>}
       {block.type === 'spacer' && <>
+        {structureLocked ? (
+          <div className="properties-sub" style={{ marginTop: 8 }}>This block has no translatable text.</div>
+        ) : (
         <div className="prop">
           <label className="prop-label">Height</label>
           <div className="prop-slider">
-            <input type="range" min="8" max="120" step="4" value={block.props.size} onChange={e=>set('size', parseInt(e.target.value))} />
-            <span className="val">{block.props.size}px</span>
+            <input type="range" min="8" max="120" step="4" value={masterProps.size} onChange={e=>set('size', parseInt(e.target.value))} />
+            <span className="val">{masterProps.size}px</span>
           </div>
         </div>
+        )}
       </>}
       {block.type === 'fullImage' && <>
+        {!structureLocked ? (
         <div className="prop">
           <label className="prop-label">Upload image</label>
           <FullImageLocalUpload
-            previewUrl={block.props.src}
+            previewUrl={masterProps.src}
             onClear={() => set('src', '')}
             onDataUrl={(dataUrl) => set('src', dataUrl)}
           />
         </div>
+        ) : null}
+        <div className="prop">
+          <label className="prop-label">Alt text (accessibility)</label>
+          <input type="text" value={props.alt ?? ''} placeholder="Describe the image" onChange={e=>set('alt', e.target.value)} />
+        </div>
       </>}
       {block.type === 'imageGrid' && (() => {
-        const gridItems = normalizeImageGridProps(block.props);
+        const gridItems = normalizeImageGridProps(props);
         const i = Math.min(Math.max(0, imageGridCardTab), gridItems.length - 1);
         const item = gridItems[i];
+        const masterGrid = normalizeImageGridProps(masterProps);
         return <>
           <div className="prop">
             <div className="prop-tabs-section-head-text">
@@ -942,31 +1721,33 @@ function Properties({ block, onChange, onDelete }) {
             </div>
           </div>
           <div className="prop-image-grid-section">
+            {!structureLocked ? (
             <div className="prop">
               <label className="prop-label">Upload image</label>
               <FullImageLocalUpload
-                previewUrl={item.src}
+                previewUrl={masterGrid[i]?.src ?? ''}
                 onClear={() => {
-                  const next = normalizeImageGridProps(block.props).map((row, j) =>
+                  const next = masterGrid.map((row, j) =>
                     j === i ? { ...row, src: '' } : row
                   );
                   set('items', next);
                 }}
                 onDataUrl={(dataUrl) => {
-                  const next = normalizeImageGridProps(block.props).map((row, j) =>
+                  const next = masterGrid.map((row, j) =>
                     j === i ? { ...row, src: dataUrl } : row
                   );
                   set('items', next);
                 }}
               />
             </div>
+            ) : null}
             <div className="prop">
               <label className="prop-label">Title</label>
               <input
                 type="text"
                 value={item.title}
                 onChange={(e) => {
-                  const next = normalizeImageGridProps(block.props).map((row, j) =>
+                  const next = gridItems.map((row, j) =>
                     j === i ? { ...row, title: e.target.value } : row
                   );
                   set('items', next);
@@ -978,7 +1759,7 @@ function Properties({ block, onChange, onDelete }) {
               <textarea
                 value={item.body}
                 onChange={(e) => {
-                  const next = normalizeImageGridProps(block.props).map((row, j) =>
+                  const next = gridItems.map((row, j) =>
                     j === i ? { ...row, body: e.target.value } : row
                   );
                   set('items', next);
@@ -989,15 +1770,16 @@ function Properties({ block, onChange, onDelete }) {
         </>;
       })()}
       {block.type === 'infoCard' && (() => {
-        const icCards = normalizeInfoCardProps(block.props).cards;
-        const i = Math.min(Math.max(0, infoCardTab), icCards.length - 1);
-        const card = icCards[i] ?? createDefaultInfoCard(0);
-        const nCards = icCards.length;
+        const icCardsMaster = normalizeInfoCardProps(masterProps).cards;
+        const icCardsResolved = normalizeInfoCardProps(props).cards;
+        const i = Math.min(Math.max(0, infoCardTab), icCardsMaster.length - 1);
+        const card = icCardsResolved[i] ?? createDefaultInfoCard(0);
+        const nCards = icCardsMaster.length;
         return <>
           <div className="prop">
             <label className="prop-label">Active card</label>
             <div className="prop-segment prop-image-grid-card-tabs" role="tablist" aria-label="Info cards">
-              {icCards.map((_, idx) => (
+              {icCardsMaster.map((_, idx) => (
                 <button
                   key={idx}
                   type="button"
@@ -1009,13 +1791,13 @@ function Properties({ block, onChange, onDelete }) {
                   {idx + 1}
                 </button>
               ))}
-              {nCards < INFO_CARD_MAX ? (
+              {!structureLocked && nCards < INFO_CARD_MAX ? (
                 <button
                   type="button"
                   className="prop-segment-add"
                   aria-label="Add card"
                   onClick={() => {
-                    const next = [...icCards, createDefaultInfoCard(icCards.length)];
+                    const next = [...icCardsMaster, createDefaultInfoCard(icCardsMaster.length)];
                     set('cards', next);
                     setInfoCardTab(next.length - 1);
                   }}
@@ -1031,13 +1813,13 @@ function Properties({ block, onChange, onDelete }) {
                 <span className="prop-tabs-section-eyebrow">Card content</span>
                 <h3 className="prop-tabs-section-heading">Card {i + 1}</h3>
               </div>
-              {nCards > 1 ? (
+              {!structureLocked && nCards > 1 ? (
                 <button
                   type="button"
                   className="prop-tabs-delete"
                   title="Remove this card from the block"
                   onClick={() => {
-                    const nextCards = icCards.filter((_, j) => j !== i);
+                    const nextCards = icCardsMaster.filter((_, j) => j !== i);
                     let nextTab = infoCardTab;
                     if (i < nextTab) nextTab -= 1;
                     else if (i === nextTab) nextTab = Math.min(i, nextCards.length - 1);
@@ -1054,30 +1836,33 @@ function Properties({ block, onChange, onDelete }) {
               ) : null}
             </div>
             <div className="prop-tabs-section-fields">
+            {!structureLocked ? (
             <div className="prop">
               <label className="prop-label">Top image</label>
               <FullImageLocalUpload
-                previewUrl={card.imageSrc}
+                previewUrl={icCardsMaster[i]?.imageSrc ?? ''}
                 onClear={() => {
-                  const next = [...icCards];
+                  const next = [...icCardsMaster];
                   next[i] = { ...next[i], imageSrc: '' };
                   set('cards', next);
                 }}
                 onDataUrl={(dataUrl) => {
-                  const next = [...icCards];
+                  const next = [...icCardsMaster];
                   next[i] = { ...next[i], imageSrc: dataUrl };
                   set('cards', next);
                 }}
               />
             </div>
+            ) : null}
             <div className="prop">
               <label className="prop-label">Heading</label>
               <input
                 type="text"
                 value={card.heading}
                 onChange={(e) => {
-                  const next = [...icCards];
-                  next[i] = { ...next[i], heading: e.target.value };
+                  const next = icCardsResolved.map((c, j) =>
+                    j === i ? { ...c, heading: e.target.value } : c
+                  );
                   set('cards', next);
                 }}
               />
@@ -1088,8 +1873,9 @@ function Properties({ block, onChange, onDelete }) {
                 type="text"
                 value={card.price}
                 onChange={(e) => {
-                  const next = [...icCards];
-                  next[i] = { ...next[i], price: e.target.value };
+                  const next = icCardsResolved.map((c, j) =>
+                    j === i ? { ...c, price: e.target.value } : c
+                  );
                   set('cards', next);
                 }}
               />
@@ -1100,12 +1886,14 @@ function Properties({ block, onChange, onDelete }) {
                 type="text"
                 value={card.ctaLabel}
                 onChange={(e) => {
-                  const next = [...icCards];
-                  next[i] = { ...next[i], ctaLabel: e.target.value };
+                  const next = icCardsResolved.map((c, j) =>
+                    j === i ? { ...c, ctaLabel: e.target.value } : c
+                  );
                   set('cards', next);
                 }}
               />
             </div>
+            {!structureLocked ? (
             <div className="prop">
               <label className="prop-label">Accent color</label>
               <div className="prop-accent-field">
@@ -1113,7 +1901,7 @@ function Properties({ block, onChange, onDelete }) {
                 <input
                   type="text"
                   className="prop-accent-hex"
-                  value={card.accentColor ?? ''}
+                  value={(icCardsMaster[i] ?? card).accentColor ?? ''}
                   placeholder={INFO_CARD_ACCENT_DEFAULT_HEX}
                   spellCheck={false}
                   autoCapitalize="off"
@@ -1122,13 +1910,13 @@ function Properties({ block, onChange, onDelete }) {
                   onChange={(e) => {
                     let v = e.target.value;
                     if (v.length > 0 && !v.startsWith('#')) v = '#' + v.replace(/^#+/, '');
-                    const next = [...icCards];
+                    const next = [...icCardsMaster];
                     next[i] = { ...next[i], accentColor: v.slice(0, 7) };
                     set('cards', next);
                   }}
                   onBlur={(e) => {
                     const normalized = normalizeAccentHex(e.target.value, INFO_CARD_ACCENT_DEFAULT_HEX);
-                    const next = [...icCards];
+                    const next = [...icCardsMaster];
                     next[i] = { ...next[i], accentColor: normalized };
                     set('cards', next);
                   }}
@@ -1136,10 +1924,10 @@ function Properties({ block, onChange, onDelete }) {
                 <input
                   type="color"
                   className="prop-accent-picker"
-                  value={normalizeAccentHex(card.accentColor, INFO_CARD_ACCENT_DEFAULT_HEX)}
+                  value={normalizeAccentHex((icCardsMaster[i] ?? card).accentColor, INFO_CARD_ACCENT_DEFAULT_HEX)}
                   aria-label="Choose accent with color picker"
                   onChange={(e) => {
-                    const next = [...icCards];
+                    const next = [...icCardsMaster];
                     next[i] = { ...next[i], accentColor: e.target.value.toLowerCase() };
                     set('cards', next);
                   }}
@@ -1150,13 +1938,13 @@ function Properties({ block, onChange, onDelete }) {
                   <button
                     key={hex}
                     type="button"
-                    className={`prop-accent-swatch${normalizeAccentHex(card.accentColor, '') === hex ? ' prop-accent-swatch--active' : ''}`}
+                    className={`prop-accent-swatch${normalizeAccentHex((icCardsMaster[i] ?? card).accentColor, '') === hex ? ' prop-accent-swatch--active' : ''}`}
                     style={{ backgroundColor: hex }}
                     title={hex}
                     aria-label={`Set accent to ${hex}`}
-                    aria-pressed={normalizeAccentHex(card.accentColor, '') === hex}
+                    aria-pressed={normalizeAccentHex((icCardsMaster[i] ?? card).accentColor, '') === hex}
                     onClick={() => {
-                      const next = [...icCards];
+                      const next = [...icCardsMaster];
                       next[i] = { ...next[i], accentColor: hex };
                       set('cards', next);
                     }}
@@ -1165,6 +1953,7 @@ function Properties({ block, onChange, onDelete }) {
               </div>
               </div>
             </div>
+            ) : null}
             <div className="prop">
               <label className="prop-label">Badge (optional)</label>
               <input
@@ -1172,8 +1961,9 @@ function Properties({ block, onChange, onDelete }) {
                 placeholder="e.g. MOST POPULAR"
                 value={card.badge}
                 onChange={(e) => {
-                  const next = [...icCards];
-                  next[i] = { ...next[i], badge: e.target.value };
+                  const next = icCardsResolved.map((c, j) =>
+                    j === i ? { ...c, badge: e.target.value } : c
+                  );
                   set('cards', next);
                 }}
               />
@@ -1188,20 +1978,22 @@ function Properties({ block, onChange, onDelete }) {
                 placeholder={'Festival access — single day\nStanding area'}
                 value={card.bulletPointsText ?? ''}
                 onChange={(e) => {
-                  const next = [...icCards];
-                  next[i] = { ...next[i], bulletPointsText: e.target.value };
+                  const next = icCardsResolved.map((c, j) =>
+                    j === i ? { ...c, bulletPointsText: e.target.value } : c
+                  );
                   set('cards', next);
                 }}
               />
             </div>
+            {!structureLocked ? (
             <div className="prop">
               <label className="prop-label">Highlight card</label>
               <div className="prop-segment">
                 <button
                   type="button"
-                  className={card.highlighted ? 'active' : ''}
+                  className={(icCardsMaster[i]?.highlighted ?? card.highlighted) ? 'active' : ''}
                   onClick={() => {
-                    const next = [...icCards];
+                    const next = [...icCardsMaster];
                     next[i] = { ...next[i], highlighted: true };
                     set('cards', next);
                   }}
@@ -1210,9 +2002,9 @@ function Properties({ block, onChange, onDelete }) {
                 </button>
                 <button
                   type="button"
-                  className={!card.highlighted ? 'active' : ''}
+                  className={!(icCardsMaster[i]?.highlighted ?? card.highlighted) ? 'active' : ''}
                   onClick={() => {
-                    const next = [...icCards];
+                    const next = [...icCardsMaster];
                     next[i] = { ...next[i], highlighted: false };
                     set('cards', next);
                   }}
@@ -1221,49 +2013,57 @@ function Properties({ block, onChange, onDelete }) {
                 </button>
               </div>
             </div>
+            ) : null}
             </div>
           </div>
         </>;
       })()}
       {block.type === 'eventDetails' && <>
-        {Array.isArray(block.props.details) && block.props.heading === undefined && block.props.promo === undefined ? (
-          block.props.details.map((d,i)=>(
+        {Array.isArray(masterProps.details) && masterProps.heading === undefined && masterProps.promo === undefined ? (
+          masterProps.details.map((d,i)=>{
+            const pd = props.details?.[i] ? { ...d, ...props.details[i] } : d;
+            return (
             <div key={i} className="prop">
               <label className="prop-label">{d.title} value</label>
-              <input type="text" value={d.sub} onChange={e=>{
-                const next = [...block.props.details]; next[i] = {...d, sub: e.target.value};
+              <input type="text" value={pd.sub} onChange={e=>{
+                const base = masterProps.details;
+                const next = [...base]; next[i] = {...d, sub: e.target.value};
                 set('details', next);
               }} />
             </div>
-          ))
+          );})
         ) : (
           <>
             <div className="prop">
               <label className="prop-label">Section heading</label>
-              <input type="text" value={block.props.heading ?? ''} onChange={e=>set('heading', e.target.value)} />
+              <input type="text" value={props.heading ?? ''} onChange={e=>set('heading', e.target.value)} />
             </div>
             <div className="prop">
               <label className="prop-label">Location line</label>
-              <input type="text" value={block.props.locationLine ?? ''} onChange={e=>set('locationLine', e.target.value)} />
+              <input type="text" value={props.locationLine ?? ''} onChange={e=>set('locationLine', e.target.value)} />
             </div>
             <div className="prop">
               <label className="prop-label">Dates line</label>
-              <input type="text" value={block.props.datesLine ?? ''} onChange={e=>set('datesLine', e.target.value)} />
+              <input type="text" value={props.datesLine ?? ''} onChange={e=>set('datesLine', e.target.value)} />
             </div>
             <div className="prop">
               <label className="prop-label">Promotional text</label>
-              <textarea value={block.props.promo ?? ''} onChange={e=>set('promo', e.target.value)} />
+              <textarea value={props.promo ?? ''} onChange={e=>set('promo', e.target.value)} />
             </div>
           </>
         )}
       </>}
       {block.type === 'tabs' && (() => {
-        const tabRows = normalizeTabsProps(block.props);
-        const n = tabRows.length;
-        const idx = n === 0 ? 0 : Math.min(Math.max(0, block.props.activeIndex ?? 0), n - 1);
-        const t = n > 0 ? tabRows[idx] : null;
+        const tabRowsMaster = normalizeTabsProps(masterProps);
+        const tabRowsResolved = normalizeTabsProps(props);
+        const tabCount = tabRowsMaster.length;
+        const idx =
+          tabCount === 0
+            ? 0
+            : Math.min(Math.max(0, masterProps.activeIndex ?? 0), tabCount - 1);
+        const t = tabCount > 0 ? tabRowsResolved[idx] : null;
         const tabBarRaw =
-          typeof block.props.tabBarColor === 'string' ? block.props.tabBarColor.trim() : '';
+          typeof masterProps.tabBarColor === 'string' ? masterProps.tabBarColor.trim() : '';
         const tabsBarHasCustom = /^#[0-9A-Fa-f]{6}$/.test(tabBarRaw);
         const tabsBarEffectiveHex = tabsBarHasCustom ? tabBarRaw : TABS_BAR_COLOR_DEFAULT_HEX;
         const tabBarNorm = normalizeAccentHex(tabBarRaw, '');
@@ -1274,6 +2074,7 @@ function Properties({ block, onChange, onDelete }) {
           return tabsBarHasCustom && tabBarNorm === hex;
         };
         return <>
+          {!structureLocked ? (
           <div className="prop">
             <label className="prop-label">Tab bar color</label>
             <div className="prop-accent-field">
@@ -1293,8 +2094,8 @@ function Properties({ block, onChange, onDelete }) {
                     set('tabBarColor', v.slice(0, 7));
                   }}
                   onBlur={(e) => {
-                    const n = normalizeAccentHex(e.target.value, '');
-                    set('tabBarColor', n || '');
+                    const hexNorm = normalizeAccentHex(e.target.value, '');
+                    set('tabBarColor', hexNorm || '');
                   }}
                 />
                 <input
@@ -1340,10 +2141,11 @@ function Properties({ block, onChange, onDelete }) {
               </div>
             </div>
           </div>
+          ) : null}
           <div className="prop">
             <label className="prop-label">Active tab</label>
             <div className="prop-segment prop-image-grid-card-tabs" role="tablist" aria-label="Tabs">
-              {tabRows.map((_, i) => (
+              {tabRowsMaster.map((_, i) => (
                 <button
                   key={i}
                   type="button"
@@ -1355,15 +2157,15 @@ function Properties({ block, onChange, onDelete }) {
                   {i + 1}
                 </button>
               ))}
-              {n < TABS_MAX ? (
+              {!structureLocked && tabCount < TABS_MAX ? (
                 <button
                   type="button"
                   className="prop-segment-add"
                   aria-label="Add tab"
                   onClick={() => {
-                    const nextTabs = [...tabRows, createDefaultTab(tabRows.length)];
-                    onChange({
-                      ...block.props,
+                    const nextTabs = [...tabRowsMaster, createDefaultTab(tabRowsMaster.length)];
+                    replaceAllProps({
+                      ...masterProps,
                       tabs: nextTabs,
                       activeIndex: nextTabs.length - 1,
                     });
@@ -1374,7 +2176,7 @@ function Properties({ block, onChange, onDelete }) {
               ) : null}
             </div>
           </div>
-          {n > 0 && t ? (
+          {tabCount > 0 && t ? (
             <div className="prop-tabs-section">
               <div className="prop-tabs-section-head">
                 <div className="prop-tabs-section-head-text">
@@ -1384,19 +2186,19 @@ function Properties({ block, onChange, onDelete }) {
                     Nav label, optional heading above the body, main text, and optional uploaded side image in the preview.
                   </p>
                 </div>
-                {n > 1 ? (
+                {!structureLocked && tabCount > 1 ? (
                   <button
                     type="button"
                     className="prop-tabs-delete"
                     title="Remove this tab from the block"
                     onClick={() => {
-                      const nextTabs = tabRows.filter((_, j) => j !== idx);
-                      let nextActive = block.props.activeIndex ?? 0;
+                      const nextTabs = tabRowsMaster.filter((_, j) => j !== idx);
+                      let nextActive = masterProps.activeIndex ?? 0;
                       if (idx < nextActive) nextActive -= 1;
                       else if (idx === nextActive) nextActive = Math.min(idx, nextTabs.length - 1);
                       nextActive = Math.max(0, Math.min(nextActive, nextTabs.length - 1));
-                      onChange({
-                        ...block.props,
+                      replaceAllProps({
+                        ...masterProps,
                         tabs: nextTabs,
                         activeIndex: nextActive,
                       });
@@ -1419,7 +2221,7 @@ function Properties({ block, onChange, onDelete }) {
                     type="text"
                     value={t.label}
                     onChange={(e) => {
-                      const next = tabRows.map((row, j) =>
+                      const next = tabRowsResolved.map((row, j) =>
                         j === idx ? { ...row, label: e.target.value } : row
                       );
                       set('tabs', next);
@@ -1436,7 +2238,7 @@ function Properties({ block, onChange, onDelete }) {
                     placeholder="Optional title above the paragraph"
                     value={t.contentTitle ?? ''}
                     onChange={(e) => {
-                      const next = tabRows.map((row, j) =>
+                      const next = tabRowsResolved.map((row, j) =>
                         j === idx ? { ...row, contentTitle: e.target.value } : row
                       );
                       set('tabs', next);
@@ -1451,31 +2253,33 @@ function Properties({ block, onChange, onDelete }) {
                     id={`tab-body-${block.id}-${idx}`}
                     value={t.body}
                     onChange={(e) => {
-                      const next = tabRows.map((row, j) =>
+                      const next = tabRowsResolved.map((row, j) =>
                         j === idx ? { ...row, body: e.target.value } : row
                       );
                       set('tabs', next);
                     }}
                   />
                 </div>
+                {!structureLocked ? (
                 <div className="prop">
                   <label className="prop-label">Upload image</label>
                   <FullImageLocalUpload
-                    previewUrl={t.imageSrc ?? ''}
+                    previewUrl={tabRowsMaster[idx]?.imageSrc ?? ''}
                     onClear={() => {
-                      const next = tabRows.map((row, j) =>
+                      const next = tabRowsMaster.map((row, j) =>
                         j === idx ? { ...row, imageSrc: '' } : row
                       );
                       set('tabs', next);
                     }}
                     onDataUrl={(dataUrl) => {
-                      const next = tabRows.map((row, j) =>
+                      const next = tabRowsMaster.map((row, j) =>
                         j === idx ? { ...row, imageSrc: dataUrl } : row
                       );
                       set('tabs', next);
                     }}
                   />
                 </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1496,6 +2300,9 @@ function App() {
   const [activeTab, setActiveTab] = React.useState('Content');
   const [device] = React.useState('desktop');
   const [eventTitle, setEventTitle] = React.useState('Pizza in Piazza');
+  /** Localized event titles keyed by locale code (excluding master `SOURCE_LOCALE`). */
+  const [eventTitleByLocale, setEventTitleByLocale] = React.useState({});
+  const [translationPreviewLocale, setTranslationPreviewLocale] = React.useState('es');
   const [blocks, setBlocks] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState(null);
   const [dragOver, setDragOver] = React.useState(false);
@@ -1545,6 +2352,12 @@ function App() {
   const selected = blocks.find(b => b.id === selectedId);
   const layoutVariant = tweaks.layoutVariant;
 
+  const editLocale =
+    activeTab === 'Translations' ? translationPreviewLocale : SOURCE_LOCALE;
+  const structureLocked =
+    activeTab === 'Translations' && translationPreviewLocale !== SOURCE_LOCALE;
+  const canvasLocale = editLocale;
+
   const closeMobileSheet = React.useCallback(() => {
     setMobileSheet((prev) => ({ ...prev, open: false }));
   }, []);
@@ -1580,6 +2393,34 @@ function App() {
   const patchBlockProps = (id, patch) => {
     setBlocks(prev => prev.map(b => (b.id === id ? { ...b, props: { ...b.props, ...patch } } : b)));
   };
+
+  const patchBlockI18n = (id, locale, patch) => {
+    if (!patch || locale === SOURCE_LOCALE) {
+      if (locale === SOURCE_LOCALE && patch) patchBlockProps(id, patch);
+      return;
+    }
+    setBlocks((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const prevOv = (b.i18n && b.i18n[locale]) || {};
+        const nextOv = pruneEmptyOverlayLeaves(mergeI18nDelta(prevOv, patch));
+        return { ...b, i18n: { ...(b.i18n || {}), [locale]: nextOv } };
+      }),
+    );
+  };
+
+  const routeCanvasPatch = (id, patch) => {
+    if (!patch) return;
+    if (Object.prototype.hasOwnProperty.call(patch, 'activeIndex')) {
+      patchBlockProps(id, patch);
+      return;
+    }
+    const loc =
+      activeTab === 'Translations' ? translationPreviewLocale : SOURCE_LOCALE;
+    if (loc === SOURCE_LOCALE) patchBlockProps(id, patch);
+    else patchBlockI18n(id, loc, patch);
+  };
+
   const deleteBlock = (id) => {
     setBlocks(prev => prev.filter(b => b.id !== id));
     if (selectedId === id) setSelectedId(null);
@@ -1710,11 +2551,27 @@ function App() {
       <main className="main">
         <div className="main-inner">
           <div className="breadcrumb">Dashboard</div>
-          <h1 className="page-title">{eventTitle}</h1>
+          <h1 className="page-title">
+            {activeTab === 'Translations'
+              ? resolveLocalizedEventTitle(eventTitle, eventTitleByLocale, translationPreviewLocale)
+              : eventTitle}
+          </h1>
           {tweaks.showStepper && <Stepper />}
 
-          <h2 className="section-title">Content</h2>
-          <p className="section-sub">Enter key details for your event, including content, images, venue, capacity, and general information.</p>
+          {activeTab !== 'Translations' ? (
+            <>
+              <h2 className="section-title">{activeTab === 'Content' ? 'Content' : activeTab}</h2>
+              <p className="section-sub">
+                {activeTab === 'Content'
+                  ? 'Enter key details for your event, including content, images, venue, capacity, and general information.'
+                  : activeTab === 'Media'
+                    ? 'Upload images and videos that appear on your Fever listing.'
+                    : activeTab === 'Venue'
+                      ? 'Configure where the event takes place and how attendees get there.'
+                      : ''}
+              </p>
+            </>
+          ) : null}
 
           <div className="tabs">
             {['Content','Media','Venue','Translations'].map(t => (
@@ -1722,13 +2579,94 @@ function App() {
             ))}
           </div>
 
-          {tweaks.showRequirements && <Requirements />}
+          {tweaks.showRequirements && activeTab === 'Content' && <Requirements />}
 
+          {activeTab === 'Content' && (
           <div className="field">
             <label className="field-label">Event title</label>
             <input className="input" value={eventTitle} onChange={e=>setEventTitle(e.target.value)} />
           </div>
+          )}
 
+          {activeTab === 'Translations' ? (
+            <div className="translation-plan-page translation-tab-panel" onClick={(e) => e.stopPropagation()}>
+              <TranslationFigmaWorkspace
+                locale={translationPreviewLocale}
+                onLocaleChange={setTranslationPreviewLocale}
+                eventTitle={eventTitle}
+                eventTitleByLocale={eventTitleByLocale}
+                onLocaleTitleChange={(loc, value) => {
+                  setEventTitleByLocale((prev) => {
+                    const next = { ...prev };
+                    if (!value.trim()) delete next[loc];
+                    else next[loc] = value;
+                    return next;
+                  });
+                }}
+                blocks={blocks}
+                patchBlockI18n={patchBlockI18n}
+                selectedBlockId={selectedId}
+                onSelectBlock={setSelectedId}
+                childrenPreview={
+                  device === 'mobile' ? (
+                    <div className="mobile-frame">
+                      <BlocksList
+                        previewReadOnly
+                        canvasLocale={canvasLocale}
+                        blocks={blocks}
+                        selectedId={selectedId}
+                        setSelectedId={setSelectedId}
+                        deleteBlock={deleteBlock}
+                        moveBlock={moveBlock}
+                        dragOverIndex={-1}
+                        layoutVariant={layoutVariant}
+                        addBlock={addBlock}
+                        pickerIndex={pickerIndex}
+                        setPickerIndex={setPickerIndex}
+                        patchBlockProps={routeCanvasPatch}
+                        onBlockDragStart={handleBlockDragStart}
+                        onBlockDragEnd={handleBlockDragEnd}
+                        isMobileViewport={isMobileViewport}
+                        onOpenMobilePicker={openMobilePicker}
+                      />
+                    </div>
+                  ) : (
+                    <BlocksList
+                      previewReadOnly
+                      canvasLocale={canvasLocale}
+                      blocks={blocks}
+                      selectedId={selectedId}
+                      setSelectedId={setSelectedId}
+                      deleteBlock={deleteBlock}
+                      moveBlock={moveBlock}
+                      dragOverIndex={-1}
+                      layoutVariant={layoutVariant}
+                      addBlock={addBlock}
+                      pickerIndex={pickerIndex}
+                      setPickerIndex={setPickerIndex}
+                      patchBlockProps={routeCanvasPatch}
+                      onBlockDragStart={handleBlockDragStart}
+                      onBlockDragEnd={handleBlockDragEnd}
+                      isMobileViewport={isMobileViewport}
+                      onOpenMobilePicker={openMobilePicker}
+                    />
+                  )
+                }
+              />
+            </div>
+          ) : activeTab === 'Media' ? (
+            <PlanTabEmptyState
+              icon="perm_media"
+              headline="No media yet"
+              description="Hero images, galleries, and video will show up here once you add them to your plan."
+            />
+          ) : activeTab === 'Venue' ? (
+            <PlanTabEmptyState
+              icon="location_on"
+              headline="Venue not set"
+              description="Add address, map location, and arrival notes so guests know exactly where to go."
+            />
+          ) : (
           <div className="field">
             <label className="field-label">Event description</label>
             <p className="field-help">The "description" section should be written in your local language. Please use respectful language suitable for all audiences. Compose the description with elements to fully customise your page.</p>
@@ -1745,6 +2683,8 @@ function App() {
                     JSON.stringify({
                       v: 1,
                       eventTitle,
+                      eventTitleByLocale,
+                      previewLocale: translationPreviewLocale,
                       blocks,
                       savedAt: Date.now(),
                     })
@@ -1797,6 +2737,7 @@ function App() {
                   {device === 'mobile' ? (
                     <div className="mobile-frame">
                       <BlocksList
+                        canvasLocale={canvasLocale}
                         blocks={blocks}
                         selectedId={selectedId}
                         setSelectedId={setSelectedId}
@@ -1807,7 +2748,7 @@ function App() {
                         addBlock={addBlock}
                         pickerIndex={pickerIndex}
                         setPickerIndex={setPickerIndex}
-                        patchBlockProps={patchBlockProps}
+                        patchBlockProps={routeCanvasPatch}
                         onBlockDragStart={handleBlockDragStart}
                         onBlockDragEnd={handleBlockDragEnd}
                         isMobileViewport={isMobileViewport}
@@ -1816,6 +2757,7 @@ function App() {
                     </div>
                   ) : (
                     <BlocksList
+                      canvasLocale={canvasLocale}
                       blocks={blocks}
                       selectedId={selectedId}
                       setSelectedId={setSelectedId}
@@ -1826,7 +2768,7 @@ function App() {
                       addBlock={addBlock}
                       pickerIndex={pickerIndex}
                       setPickerIndex={setPickerIndex}
-                      patchBlockProps={patchBlockProps}
+                      patchBlockProps={routeCanvasPatch}
                       onBlockDragStart={handleBlockDragStart}
                       onBlockDragEnd={handleBlockDragEnd}
                       isMobileViewport={isMobileViewport}
@@ -1839,12 +2781,16 @@ function App() {
               {!isMobileViewport && layoutVariant !== 'floating-toolbar' && (
                 <Properties
                   block={selected}
-                  onChange={(props)=>selected && updateBlock(selected.id, props)}
+                  editLocale={editLocale}
+                  onPatch={(patch) => selected && routeCanvasPatch(selected.id, patch)}
+                  onReplaceProps={(full) => selected && updateBlock(selected.id, full)}
                   onDelete={()=>selected && deleteBlock(selected.id)}
+                  structureLocked={structureLocked}
                 />
               )}
             </div>
           </div>
+          )}
         </div>
 
         <div className="footer">
@@ -1893,12 +2839,15 @@ function App() {
                 </div>
                 <Properties
                   block={selected}
-                  onChange={(props)=>selected && updateBlock(selected.id, props)}
+                  editLocale={editLocale}
+                  onPatch={(patch) => selected && routeCanvasPatch(selected.id, patch)}
+                  onReplaceProps={(full) => selected && updateBlock(selected.id, full)}
                   onDelete={()=>{
                     if (!selected) return;
                     deleteBlock(selected.id);
                     closeMobileSheet();
                   }}
+                  structureLocked={structureLocked}
                 />
               </div>
             )}
@@ -1982,8 +2931,33 @@ function CanvasEmptyPlusWrap({ insertAtIndex, isOpen, onToggleOpen, addBlock, se
   );
 }
 
-function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock, dragOverIndex, layoutVariant, addBlock, pickerIndex, setPickerIndex, patchBlockProps, onBlockDragStart, onBlockDragEnd, isMobileViewport, onOpenMobilePicker }) {
+function BlocksList({
+  blocks,
+  canvasLocale,
+  selectedId,
+  setSelectedId,
+  deleteBlock,
+  moveBlock,
+  dragOverIndex,
+  layoutVariant,
+  addBlock,
+  pickerIndex,
+  setPickerIndex,
+  patchBlockProps,
+  onBlockDragStart,
+  onBlockDragEnd,
+  isMobileViewport,
+  onOpenMobilePicker,
+  previewReadOnly,
+}) {
   if (blocks.length === 0 && dragOverIndex < 0) {
+    if (previewReadOnly) {
+      return (
+        <div className="canvas-empty canvas-empty--translation-preview">
+          <div>No description blocks yet. Add components on the <strong>Content</strong> tab.</div>
+        </div>
+      );
+    }
     const emptyPickerOpen = pickerIndex === PICKER_EMPTY;
     return (
       <div className="canvas-empty">
@@ -2005,7 +2979,7 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
     if (dragOverIndex === i) {
       items.push(<div key={`d-${i}`} className="drop-indicator show"></div>);
     }
-    if (layoutVariant === 'inline-plus' && i < blocks.length) {
+    if (!previewReadOnly && layoutVariant === 'inline-plus' && i < blocks.length) {
       items.push(
         <div key={`ins-${i}`} className="inline-inserter">
           <button
@@ -2035,10 +3009,12 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
     }
     if (i < blocks.length) {
       const b = blocks[i];
+      const displayProps = resolveLocalizedProps(b, canvasLocale ?? SOURCE_LOCALE);
       items.push(
         <Block
           key={b.id}
           block={b}
+          displayProps={displayProps}
           selected={selectedId === b.id}
           onSelect={setSelectedId}
           onDelete={()=>deleteBlock(b.id)}
@@ -2046,13 +3022,14 @@ function BlocksList({ blocks, selectedId, setSelectedId, deleteBlock, moveBlock,
           onMoveDown={()=>moveBlock(b.id, 1)}
           layoutVariant={layoutVariant}
           onPatchBlockProps={patchBlockProps}
-          onBlockDragStart={onBlockDragStart}
-          onBlockDragEnd={onBlockDragEnd}
+          onBlockDragStart={previewReadOnly ? undefined : onBlockDragStart}
+          onBlockDragEnd={previewReadOnly ? undefined : onBlockDragEnd}
+          previewReadOnly={previewReadOnly}
         />
       );
     }
   }
-  if (blocks.length > 0) {
+  if (blocks.length > 0 && !previewReadOnly) {
     const trailingOpen = pickerIndex === PICKER_TRAILING;
     items.push(
       <div key="canvas-trailing-add" className="canvas-trailing-plus">

@@ -12,6 +12,70 @@
     'Festival access — single day\nStanding area\nMerch discount';
   const INFO_CARD_ACCENT_DEFAULT_HEX = '#e31b23';
 
+  const SOURCE_LOCALE = 'en';
+
+  function mergeLocaleRow(baseRow, overlayRow) {
+    if (!overlayRow || typeof overlayRow !== 'object') return baseRow;
+    const out = { ...baseRow };
+    for (const [k, v] of Object.entries(overlayRow)) {
+      if (v === '' || v === undefined) continue;
+      out[k] = v;
+    }
+    return out;
+  }
+
+  function mergePropsLocaleOverlay(baseProps, overlay) {
+    if (!overlay || typeof overlay !== 'object') return baseProps;
+    const base = baseProps || {};
+    const out = { ...base };
+    for (const [k, v] of Object.entries(overlay)) {
+      if (v === '' || v === undefined) continue;
+      if (
+        k !== 'items' &&
+        k !== 'cards' &&
+        k !== 'tabs' &&
+        k !== 'details' &&
+        v !== null &&
+        typeof v !== 'object'
+      ) {
+        out[k] = v;
+      }
+    }
+    if (Array.isArray(base.items) && overlay.items) {
+      out.items = base.items.map((row, i) => mergeLocaleRow(row || {}, overlay.items[i] || {}));
+    }
+    if (Array.isArray(base.cards) && overlay.cards) {
+      out.cards = base.cards.map((row, i) => mergeLocaleRow(row || {}, overlay.cards[i] || {}));
+    }
+    if (Array.isArray(base.tabs) && overlay.tabs) {
+      out.tabs = base.tabs.map((row, i) => mergeLocaleRow(row || {}, overlay.tabs[i] || {}));
+    }
+    if (Array.isArray(base.details) && overlay.details) {
+      out.details = base.details.map((row, i) => mergeLocaleRow(row || {}, overlay.details[i] || {}));
+    }
+    return out;
+  }
+
+  function resolveBlockForPreview(block, locale) {
+    if (!block || locale === SOURCE_LOCALE) return block;
+    const ov = block.i18n && block.i18n[locale];
+    if (!ov) return block;
+    return {
+      ...block,
+      props: mergePropsLocaleOverlay(block.props || {}, ov),
+    };
+  }
+
+  function resolveHeroTitle(data) {
+    const master = typeof data.eventTitle === 'string' ? data.eventTitle.trim() : '';
+    const loc =
+      typeof data.previewLocale === 'string' ? data.previewLocale : SOURCE_LOCALE;
+    if (loc === SOURCE_LOCALE) return master;
+    const map = data.eventTitleByLocale;
+    if (map && typeof map[loc] === 'string' && map[loc].trim()) return map[loc].trim();
+    return master;
+  }
+
   function clamp255(n) {
     return Math.max(0, Math.min(255, Math.round(n)));
   }
@@ -482,22 +546,22 @@
     const fb = root.querySelector('[data-pcp-builder-fallback]');
     if (fb) fb.remove();
     root.innerHTML = '';
+    const locale =
+      typeof data.previewLocale === 'string' ? data.previewLocale : SOURCE_LOCALE;
     (data.blocks || []).forEach((block) => {
       try {
-        const node = renderBlock(block);
+        const node = renderBlock(resolveBlockForPreview(block, locale));
         if (node) root.appendChild(node);
       } catch (e) {
         console.warn('Plan preview: skip block', block, e);
       }
     });
     const heroTitle = document.getElementById('pcp-hero-title');
+    const titleResolved = resolveHeroTitle(data);
     if (heroTitle) {
-      heroTitle.textContent =
-        typeof data.eventTitle === 'string' ? data.eventTitle.trim() : '';
+      heroTitle.textContent = titleResolved;
     }
-    const titleBase =
-      typeof data.eventTitle === 'string' ? data.eventTitle.trim() : '';
-    document.title = titleBase ? `${titleBase} — Plan preview` : 'Plan preview';
+    document.title = titleResolved ? `${titleResolved} — Plan preview` : 'Plan preview';
   }
 
   function tryMount() {
@@ -517,6 +581,8 @@
     if (!parsed || typeof parsed !== 'object') return;
     mountDescription({
       eventTitle: parsed.eventTitle,
+      eventTitleByLocale: parsed.eventTitleByLocale,
+      previewLocale: parsed.previewLocale,
       blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
     });
   }
