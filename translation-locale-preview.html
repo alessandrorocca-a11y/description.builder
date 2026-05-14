@@ -3,16 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Local dev: discourage stale CSS/JS when iterating (hard refresh alone is not always enough). -->
   <meta http-equiv="Cache-Control" content="no-cache" />
-  <title>FeverZone — Description Builder</title>
-  <!--
-    Serve from the folder that contains this file (workspace root): python3 -m http.server 8765 --bind 127.0.0.1
-    Do not open as file:// — use http://127.0.0.1:8765/Description%20Builder.html
-    If layout looks old/wrong: DevTools → Network → confirm styles.css & app.jsx return 200 from this folder.
-    Bump ?v= below when you change CSS/JS so the browser cannot reuse an old cached asset.
-  -->
-
+  <title>Translation locale preview — Description Builder</title>
   <link rel="stylesheet" href="design-system.css?v=2" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" />
   <link rel="stylesheet" href="styles.css?v=54" />
@@ -22,7 +14,7 @@
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="translation-locale-preview-root"></div>
 
   <script type="text/babel" src="tweaks-panel.jsx?v=2"></script>
   <script type="text/babel" src="app.jsx?v=57"></script>

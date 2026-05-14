@@ -275,6 +275,32 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 /** Master locale: canonical content in `block.props`; overlays per locale in `block.i18n`. */
 const SOURCE_LOCALE = 'en';
 
+const PLAN_TAB_CODES = ['Content', 'Media', 'Venue', 'Translations'];
+
+function readPlanTabFromUrl() {
+  if (typeof window === 'undefined') return 'Content';
+  try {
+    const raw = new URLSearchParams(window.location.search).get('tab');
+    if (raw && PLAN_TAB_CODES.includes(raw)) return raw;
+  } catch {
+    /* ignore */
+  }
+  return 'Content';
+}
+
+function replacePlanTabInUrl(tab) {
+  if (typeof window === 'undefined') return;
+  try {
+    const u = new URL(window.location.href);
+    if (tab === 'Content') u.searchParams.delete('tab');
+    else u.searchParams.set('tab', tab);
+    const q = u.searchParams.toString();
+    window.history.replaceState({}, '', `${u.pathname}${q ? `?${q}` : ''}${u.hash}`);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Locales shown in the translation preview + editor. */
 const TRANSLATION_LOCALE_OPTIONS = [
   { code: 'en', label: 'English (master)' },
@@ -282,6 +308,42 @@ const TRANSLATION_LOCALE_OPTIONS = [
   { code: 'fr', label: 'French' },
   { code: 'de', label: 'German' },
 ];
+
+const CHANNEL_EDITOR_STORAGE_KEY = 'descriptionBuilderChannelEditorLaunch';
+
+function cloneJsonSafe(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function writeChannelEditorLaunchPayload(payload) {
+  const raw = JSON.stringify(payload);
+  try {
+    sessionStorage.setItem(CHANNEL_EDITOR_STORAGE_KEY, raw);
+  } catch (e) {
+    console.warn('Channel editor: sessionStorage write failed', e);
+  }
+  try {
+    localStorage.setItem(CHANNEL_EDITOR_STORAGE_KEY, raw);
+  } catch (e) {
+    console.warn('Channel editor: localStorage write failed', e);
+  }
+}
+
+function readChannelEditorLaunchPayload() {
+  try {
+    let raw = sessionStorage.getItem(CHANNEL_EDITOR_STORAGE_KEY);
+    if (!raw) raw = localStorage.getItem(CHANNEL_EDITOR_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data && typeof data === 'object' ? data : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Merge one row object; empty strings on overlay skip → keep master (fallback). */
 function mergeLocaleRow(baseRow, overlayRow) {
@@ -521,6 +583,159 @@ function applyTranslationRowChange(block, locale, leafKey, newValue, patchBlockI
   patchBlockI18n(block.id, locale, pruneEmptyOverlayLeaves(patch));
 }
 
+const TRANSLATION_FIGMA_CHANNELS = [
+  { id: 'all', name: 'All channels', isDefault: true, status: 'complete' },
+  { id: 'reseller', name: 'Reseller', isDefault: false, status: 'complete' },
+  { id: 'white_label', name: 'White label', isDefault: false, status: 'warning' },
+];
+
+function translationFigmaChannelScopeLabel(channelId) {
+  if (channelId === 'white_label') return 'White Label';
+  if (channelId === 'reseller') return 'Reseller';
+  return 'All channels';
+}
+
+function TranslationFigmaLangColumns({ locale, onLocaleChange, done, total }) {
+  return (
+    <div className="translation-figma-lang-columns">
+      <div className="translation-figma-lang-card translation-figma-lang-card--source">
+        <div className="translation-figma-lang-card-inner">
+          <span className="translation-figma-lang-card-title">English</span>
+          <span className="translation-figma-lang-pill translation-figma-lang-pill--default">Default</span>
+          <span className="ms material-symbols-outlined translation-figma-lang-card-chevron" aria-hidden>
+            expand_more
+          </span>
+        </div>
+      </div>
+      <div className="translation-figma-lang-card translation-figma-lang-card--target">
+        <label htmlFor="translation-target-select" className="sr-only">
+          Target language
+        </label>
+        <div className="translation-figma-lang-select-wrap">
+          <select
+            id="translation-target-select"
+            className="translation-figma-lang-select"
+            value={locale}
+            onChange={(e) => onLocaleChange(e.target.value)}
+          >
+            {TRANSLATION_LOCALE_OPTIONS.map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="ms material-symbols-outlined translation-figma-lang-select-chevron" aria-hidden>
+            expand_more
+          </span>
+        </div>
+        {locale !== SOURCE_LOCALE ? (
+          <div
+            className={`translation-figma-progress translation-figma-progress--card ${done < total ? 'translation-figma-progress--warn' : ''}`}
+          >
+            <span className="translation-figma-progress-count">
+              <span className="translation-figma-progress-num">{done}</span>
+              <span className="translation-figma-progress-slash">/</span>
+              <span className="translation-figma-progress-num">{total}</span>
+            </span>
+            <span className="translation-figma-progress-rest"> translated</span>
+            <span className="ms material-symbols-outlined translation-figma-progress-warn-icon" aria-hidden>
+              {done < total ? 'warning' : 'check_circle'}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TranslationFigmaChannelsPanel({
+  channelScope,
+  onChannelScopeChange,
+  activeChannelId,
+  onActiveChannelChange,
+}) {
+  const channelsMissing = TRANSLATION_FIGMA_CHANNELS.some((c) => c.status === 'warning');
+  return (
+    <aside className="translation-figma-channels-panel" aria-label="Channels to apply translations">
+      {channelsMissing ? (
+        <div className="translation-figma-channel-alert" role="status">
+          <span className="ms material-symbols-outlined translation-figma-channel-alert-icon" aria-hidden>
+            warning
+          </span>
+          <span>Some channels have missing translations.</span>
+        </div>
+      ) : null}
+
+      <div className="translation-figma-channel-field">
+        <label htmlFor="translation-channel-scope" className="translation-figma-channel-field-label">
+          Channels
+        </label>
+        <div className="translation-figma-channel-field-box">
+          <select
+            id="translation-channel-scope"
+            className="translation-figma-channel-field-select"
+            value={channelScope}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChannelScopeChange(v);
+              onActiveChannelChange(v);
+            }}
+            aria-label="Channel scope"
+          >
+            <option value="all">All</option>
+            <option value="reseller">Reseller</option>
+            <option value="white_label">White label</option>
+          </select>
+          <span className="ms material-symbols-outlined translation-figma-channel-field-chevron" aria-hidden>
+            expand_more
+          </span>
+        </div>
+      </div>
+
+      <div className="translation-figma-channel-list-head">
+        <span className="translation-figma-channel-list-title">Available channels</span>
+        <button type="button" className="btn btn-primary translation-figma-channel-edit-btn">
+          Edit
+        </button>
+      </div>
+
+      <ul className="translation-figma-channel-cards" role="list">
+        {TRANSLATION_FIGMA_CHANNELS.map((ch) => {
+          const selected = activeChannelId === ch.id;
+          const warn = ch.status === 'warning';
+          return (
+            <li key={ch.id} className="translation-figma-channel-cards-item">
+              <button
+                type="button"
+                className={`translation-figma-channel-card${selected ? ' translation-figma-channel-card--selected' : ''}`}
+                onClick={() => {
+                  onActiveChannelChange(ch.id);
+                  onChannelScopeChange(ch.id);
+                }}
+                aria-pressed={selected}
+              >
+                <span className="translation-figma-channel-card-main">
+                  <span className="translation-figma-channel-card-name">{ch.name}</span>
+                  {ch.isDefault ? (
+                    <span className="translation-figma-channel-badge">Default</span>
+                  ) : null}
+                </span>
+                <span className="translation-figma-channel-card-status" aria-hidden>
+                  {warn ? (
+                    <span className="ms material-symbols-outlined translation-figma-channel-card-warn">warning</span>
+                  ) : (
+                    <span className="ms material-symbols-outlined translation-figma-channel-card-ok">check_circle</span>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+}
+
 function TranslationFigmaWorkspace({
   locale,
   onLocaleChange,
@@ -532,16 +747,78 @@ function TranslationFigmaWorkspace({
   childrenPreview,
   selectedBlockId = null,
   onSelectBlock,
+  previewMode,
+  initialChannelId = null,
+  hideChannelContentEdit = false,
+  channelEditorLaunchMeta = null,
+  /** When true, the translation preview column does not swallow drag/drop (for embedded description builder). */
+  allowPreviewCanvasDnD = false,
+  /** When set (e.g. channel editor), merge patches into `block.props` for master-only fields such as Info card accents. */
+  patchBlockMasterProps = null,
 }) {
+  const isLangBodyPreview = previewMode === 'langAndBody';
+  const translationPreviewSlotClassName = `translation-figma-preview-slot translation-figma-preview-slot--direct${
+    allowPreviewCanvasDnD ? ' translation-figma-preview-slot--editable-canvas' : ''
+  }`;
+  const translationPreviewSlotDragShieldProps = allowPreviewCanvasDnD
+    ? {}
+    : {
+        onDragOver: (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'none';
+        },
+        onDrop: (e) => {
+          e.preventDefault();
+        },
+      };
+  const resolveInitialChannelId = () => {
+    if (initialChannelId && TRANSLATION_FIGMA_CHANNELS.some((c) => c.id === initialChannelId)) {
+      return initialChannelId;
+    }
+    return isLangBodyPreview ? 'reseller' : 'all';
+  };
   const [search, setSearch] = React.useState('');
-  const [untranslatedOnly, setUntranslatedOnly] = React.useState(false);
+  const [translationsByChannel, setTranslationsByChannel] = React.useState(() => isLangBodyPreview);
+  const [channelScope, setChannelScope] = React.useState(resolveInitialChannelId);
+  const [activeChannelId, setActiveChannelId] = React.useState(resolveInitialChannelId);
   const [saveFlash, setSaveFlash] = React.useState(false);
-  const [openSections, setOpenSections] = React.useState(() => new Set());
+  const [openSections, setOpenSections] = React.useState(() =>
+    isLangBodyPreview ? new Set(['__event_content']) : new Set(),
+  );
+
+  const translationBlockIdsKey = React.useMemo(() => blocks.map((b) => b.id).join('|'), [blocks]);
 
   React.useEffect(() => {
+    if (isLangBodyPreview) {
+      setOpenSections((prev) => {
+        const next = new Set(prev);
+        next.add('__event_content');
+        return next;
+      });
+      return;
+    }
     if (locale === SOURCE_LOCALE) return;
     setOpenSections(new Set(['__event_content']));
-  }, [locale]);
+  }, [locale, isLangBodyPreview]);
+
+  React.useEffect(() => {
+    if (!isLangBodyPreview || locale === SOURCE_LOCALE) return;
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      next.add('__event_content');
+      blocks.forEach((block) => {
+        if (collectTranslationRows(block, locale).length) next.add(block.id);
+      });
+      return next;
+    });
+  }, [isLangBodyPreview, locale, translationBlockIdsKey]);
+
+  React.useEffect(() => {
+    if (!translationsByChannel) {
+      setChannelScope('all');
+      setActiveChannelId('all');
+    }
+  }, [translationsByChannel]);
 
   React.useEffect(() => {
     if (locale === SOURCE_LOCALE) return;
@@ -601,7 +878,6 @@ function TranslationFigmaWorkspace({
   });
 
   const filtered = annotated.filter((r) => {
-    if (untranslatedOnly && !r.needsWarning) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     return (
@@ -613,6 +889,7 @@ function TranslationFigmaWorkspace({
 
   const total = annotated.length;
   const done = annotated.filter((r) => !r.needsWarning).length;
+  const targetLocaleLabel = TRANSLATION_LOCALE_OPTIONS.find((o) => o.code === locale)?.label ?? locale;
 
   const eventRowsFiltered =
     locale !== SOURCE_LOCALE ? filtered.filter((r) => String(r.rowId).startsWith('__event:')) : [];
@@ -643,29 +920,210 @@ function TranslationFigmaWorkspace({
     window.setTimeout(() => setSaveFlash(false), 1800);
   };
 
-  const openProductPreviewInNewTab = React.useCallback(() => {
+  const openChannelEditorPage = React.useCallback(() => {
+    if (hideChannelContentEdit) return;
     try {
-      localStorage.setItem(
-        'descriptionBuilderPlanPreview',
-        JSON.stringify({
-          v: 1,
-          eventTitle,
-          eventTitleByLocale,
-          previewLocale: locale,
-          blocks,
-          savedAt: Date.now(),
-        })
-      );
-    } catch (err) {
-      console.warn('Preview: could not store canvas state', err);
-      return;
+      const blocksCopy = cloneJsonSafe(blocks);
+      const eventTitleByLocaleCopy = cloneJsonSafe(eventTitleByLocale) || {};
+      const meta =
+        channelEditorLaunchMeta && typeof channelEditorLaunchMeta === 'object'
+          ? cloneJsonSafe(channelEditorLaunchMeta) || {}
+          : {};
+      writeChannelEditorLaunchPayload({
+        v: 1,
+        eventTitle,
+        eventTitleByLocale: eventTitleByLocaleCopy,
+        blocks: Array.isArray(blocksCopy) ? blocksCopy : [],
+        locale,
+        activeChannelId,
+        savedAt: Date.now(),
+        ...meta,
+      });
+    } catch (e) {
+      console.warn('Channel editor: could not serialize or store launch payload', e);
     }
-    const a = document.createElement('a');
-    a.href = PRODUCT_PAGE_PREVIEW_URL;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.click();
-  }, [eventTitle, eventTitleByLocale, locale, blocks]);
+    const u = new URL('translation-channel-editor.html', window.location.href);
+    u.searchParams.set('locale', locale);
+    u.searchParams.set('channel', activeChannelId);
+    window.open(u.toString(), '_blank', 'noopener,noreferrer');
+  }, [
+    eventTitle,
+    eventTitleByLocale,
+    blocks,
+    locale,
+    activeChannelId,
+    hideChannelContentEdit,
+    channelEditorLaunchMeta,
+  ]);
+
+  const renderTargetLocaleEditor = () => (
+    <>
+      {translationsByChannel ? (
+        <div className="translation-figma-channel-content-head" aria-label="Channel translation scope">
+          <h2 className="translation-figma-channel-content-title">
+            {targetLocaleLabel} ({translationFigmaChannelScopeLabel(activeChannelId)})
+          </h2>
+          <div className="translation-figma-channel-content-head-progress">
+            <span className="translation-figma-channel-content-progress-num">{done}</span>
+            <span className="translation-figma-channel-content-progress-slash">/</span>
+            <span className="translation-figma-channel-content-progress-num">{total}</span>
+            <span className="translation-figma-channel-content-progress-rest"> translated</span>
+          </div>
+          {!hideChannelContentEdit ? (
+            <button
+              type="button"
+              className="btn btn-primary translation-figma-channel-content-edit-btn"
+              onClick={openChannelEditorPage}
+            >
+              Edit
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="translation-figma-event-content-wrap">
+        <div className="translation-figma-section--event-content">
+          <button
+            type="button"
+            className="translation-figma-section-head"
+            onClick={() => toggleSection('__event_content')}
+            aria-expanded={openSections.has('__event_content')}
+          >
+            <span className="ms material-symbols-outlined translation-figma-chevron">
+              {openSections.has('__event_content') ? 'expand_less' : 'chevron_right'}
+            </span>
+            <span className="translation-figma-section-title">Event content</span>
+            <span
+              className={`translation-figma-section-meta ${
+                evTotal === 0 || evDone < evTotal
+                  ? 'translation-figma-section-meta--warn'
+                  : 'translation-figma-section-meta--complete'
+              }`}
+            >
+              {evDone}/{evTotal} translated
+            </span>
+          </button>
+          {openSections.has('__event_content') ? (
+            <div className="translation-figma-event-content-body">
+              {eventTranslationRow ? (
+                <>
+                  <TranslationFigmaFieldRow
+                    row={{ ...eventTranslationRow, fieldLabel: 'Title *', multiline: false }}
+                    needsWarning={
+                      !(eventTranslationRow.targetText || '').trim() ||
+                      (eventTranslationRow.targetText || '').trim() === (eventTranslationRow.sourceText || '').trim()
+                    }
+                    onChange={(v) => handleTargetChange(eventTranslationRow, v)}
+                    onFocusBlock={onSelectBlock}
+                  />
+                </>
+              ) : null}
+              <div className="translation-figma-description-split-head">
+                <div className="translation-figma-field-label-row">
+                  <span className="translation-figma-field-label">Description *</span>
+                  {descriptionNeedsWarning ? (
+                    <span className="translation-figma-warn-icon" title="Still matches English or empty">
+                      <span className="ms material-symbols-outlined">warning</span>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="translation-figma-main-split translation-figma-main-split--in-event">
+                <div className="translation-figma-preview-column" aria-label="Live preview">
+                  <div className={translationPreviewSlotClassName} {...translationPreviewSlotDragShieldProps}>
+                    {childrenPreview}
+                  </div>
+                </div>
+
+                <div className="translation-figma-editor-column" aria-label="Translation fields">
+                  <div className="translation-figma-editor-column-body">
+                    <div className="translation-figma-dual-wrap">
+                      {blocks.map((block, bi) => {
+                        const blockRows = filtered.filter((r) => r.blockId === block.id);
+                        const showMasterChrome =
+                          typeof patchBlockMasterProps === 'function' &&
+                          (block.type === 'infoCard' || block.type === 'tabs');
+                        if (blockRows.length === 0 && !showMasterChrome) return null;
+                        const t = COMPONENT_TYPES[block.type];
+                        const secDone = blockRows.filter((r) => !r.needsWarning).length;
+                        const secTotal = blockRows.length;
+                        const metaComplete = secTotal === 0 || secDone >= secTotal;
+                        return (
+                          <div key={block.id} className="translation-figma-section" data-translation-section={block.id}>
+                            <button
+                              type="button"
+                              className="translation-figma-section-head"
+                              onClick={() => toggleSection(block.id)}
+                              aria-expanded={openSections.has(block.id)}
+                            >
+                              <span className="ms material-symbols-outlined translation-figma-chevron">
+                                {openSections.has(block.id) ? 'expand_less' : 'chevron_right'}
+                              </span>
+                              <span className="translation-figma-section-title">
+                                <span className="ms material-symbols-outlined translation-figma-section-icon">{t.icon}</span>
+                                {t.label}
+                                <span className="translation-figma-section-idx"> · Block {bi + 1}</span>
+                              </span>
+                              <span
+                                className={`translation-figma-section-meta ${
+                                  metaComplete
+                                    ? 'translation-figma-section-meta--complete'
+                                    : 'translation-figma-section-meta--warn'
+                                }`}
+                              >
+                                {secTotal > 0 ? `${secDone}/${secTotal}` : 'Listing'}
+                              </span>
+                            </button>
+                            {openSections.has(block.id) ? (
+                              <div className="translation-figma-section-expand">
+                                {patchBlockMasterProps && block.type === 'infoCard' ? (
+                                  <TranslationFigmaInfoCardAccentPanel
+                                    block={block}
+                                    onPatchMaster={patchBlockMasterProps}
+                                  />
+                                ) : null}
+                                {patchBlockMasterProps && block.type === 'tabs' ? (
+                                  <TranslationFigmaTabsBarColorPanel
+                                    block={block}
+                                    onPatchMaster={patchBlockMasterProps}
+                                  />
+                                ) : null}
+                                {blockRows.map((row) => (
+                                  <TranslationFigmaFieldRow
+                                    key={row.rowId}
+                                    row={row}
+                                    needsWarning={row.needsWarning}
+                                    onChange={(v) => handleTargetChange(row, v)}
+                                    onFocusBlock={onSelectBlock}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+
+  if (isLangBodyPreview) {
+    return (
+      <div className="translation-figma-root translation-figma-root--locale-preview">
+        <div className="translation-figma-workspace-top">
+          <TranslationFigmaLangColumns locale={locale} onLocaleChange={onLocaleChange} done={done} total={total} />
+        </div>
+        <div className="translation-figma-body translation-figma-body--by-channel translation-figma-body--locale-preview-solo">
+          <div className="translation-figma-body-main">{renderTargetLocaleEditor()}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="translation-figma-root">
@@ -679,13 +1137,6 @@ function TranslationFigmaWorkspace({
           <div className="translation-figma-workspace-actions">
             <button
               type="button"
-              className="btn btn-secondary translation-figma-preview-top"
-              onClick={openProductPreviewInNewTab}
-            >
-              Preview
-            </button>
-            <button
-              type="button"
               className={`btn btn-primary translation-figma-save-top ${saveFlash ? 'translation-figma-save-top--flash' : ''}`}
               onClick={onSaveClick}
             >
@@ -693,54 +1144,7 @@ function TranslationFigmaWorkspace({
             </button>
           </div>
         </div>
-        <div className="translation-figma-lang-columns">
-          <div className="translation-figma-lang-card translation-figma-lang-card--source">
-            <div className="translation-figma-lang-card-inner">
-              <span className="translation-figma-lang-card-title">English</span>
-              <span className="translation-figma-lang-pill translation-figma-lang-pill--default">Default</span>
-              <span className="ms material-symbols-outlined translation-figma-lang-card-chevron" aria-hidden>
-                expand_more
-              </span>
-            </div>
-          </div>
-          <div className="translation-figma-lang-card translation-figma-lang-card--target">
-            <label htmlFor="translation-target-select" className="sr-only">
-              Target language
-            </label>
-            <div className="translation-figma-lang-select-wrap">
-              <select
-                id="translation-target-select"
-                className="translation-figma-lang-select"
-                value={locale}
-                onChange={(e) => onLocaleChange(e.target.value)}
-              >
-                {TRANSLATION_LOCALE_OPTIONS.map((o) => (
-                  <option key={o.code} value={o.code}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <span className="ms material-symbols-outlined translation-figma-lang-select-chevron" aria-hidden>
-                expand_more
-              </span>
-            </div>
-            {locale !== SOURCE_LOCALE ? (
-              <div
-                className={`translation-figma-progress translation-figma-progress--card ${done < total ? 'translation-figma-progress--warn' : ''}`}
-              >
-                <span className="translation-figma-progress-count">
-                  <span className="translation-figma-progress-num">{done}</span>
-                  <span className="translation-figma-progress-slash">/</span>
-                  <span className="translation-figma-progress-num">{total}</span>
-                </span>
-                <span className="translation-figma-progress-rest"> translated</span>
-                <span className="ms material-symbols-outlined translation-figma-progress-warn-icon" aria-hidden>
-                  {done < total ? 'warning' : 'check_circle'}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <TranslationFigmaLangColumns locale={locale} onLocaleChange={onLocaleChange} done={done} total={total} />
       </div>
 
       <div className="translation-figma-controls">
@@ -758,20 +1162,37 @@ function TranslationFigmaWorkspace({
         <div className="translation-figma-toggle translation-figma-toggle--switch-row">
           <button
             type="button"
-            id="translation-untranslated-only-switch"
+            id="translation-by-channel-switch"
             role="switch"
-            aria-checked={untranslatedOnly}
-            className={`translation-figma-switch ${untranslatedOnly ? 'translation-figma-switch--on' : ''}`}
-            onClick={() => setUntranslatedOnly((v) => !v)}
+            aria-label="Translations by channel"
+            aria-checked={translationsByChannel}
+            className={`translation-figma-switch ${translationsByChannel ? 'translation-figma-switch--on' : ''}`}
+            onClick={() => setTranslationsByChannel((v) => !v)}
           >
             <span className="translation-figma-switch-thumb" aria-hidden />
           </button>
-          <label className="translation-figma-toggle-text" htmlFor="translation-untranslated-only-switch">
-            Untranslated only
+          <label className="translation-figma-toggle-text" htmlFor="translation-by-channel-switch">
+            Translations by channel
           </label>
         </div>
       </div>
 
+      <div
+        className={
+          translationsByChannel && locale !== SOURCE_LOCALE
+            ? 'translation-figma-body translation-figma-body--by-channel'
+            : 'translation-figma-body'
+        }
+      >
+        {translationsByChannel && locale !== SOURCE_LOCALE ? (
+          <TranslationFigmaChannelsPanel
+            channelScope={channelScope}
+            onChannelScopeChange={setChannelScope}
+            activeChannelId={activeChannelId}
+            onActiveChannelChange={setActiveChannelId}
+          />
+        ) : null}
+        <div className="translation-figma-body-main">
       {locale === SOURCE_LOCALE ? (
         <>
           <p className="translation-figma-master-hint">
@@ -783,16 +1204,7 @@ function TranslationFigmaWorkspace({
                 <span className="translation-figma-preview-column-title">Preview</span>
                 <span className="translation-figma-preview-column-sub">Content builder layout, read-only</span>
               </div>
-              <div
-                className="translation-figma-preview-slot translation-figma-preview-slot--direct"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'none';
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                }}
-              >
+              <div className={translationPreviewSlotClassName} {...translationPreviewSlotDragShieldProps}>
                 {childrenPreview}
               </div>
             </div>
@@ -804,128 +1216,221 @@ function TranslationFigmaWorkspace({
           </div>
         </>
       ) : (
-        <div className="translation-figma-event-content-wrap">
-          <div className="translation-figma-section--event-content">
+        renderTargetLocaleEditor()
+      )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Info card master chrome (Active card + accent), matching `Properties` markup for channel editor. */
+function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
+  const [activeCardIndex, setActiveCardIndex] = React.useState(0);
+  React.useEffect(() => {
+    setActiveCardIndex(0);
+  }, [block.id]);
+
+  if (block.type !== 'infoCard' || typeof onPatchMaster !== 'function') return null;
+
+  const { cards: cardsMaster } = normalizeInfoCardProps(block.props);
+  const nCards = cardsMaster.length;
+  const i = Math.min(Math.max(0, activeCardIndex), Math.max(0, nCards - 1));
+  const cardAt = cardsMaster[i] ?? createDefaultInfoCard(i);
+
+  const setCards = (next) => {
+    onPatchMaster(block.id, { cards: next });
+  };
+
+  const patchCardAccent = (mutate) => {
+    const next = cardsMaster.map((c, j) => (j === i ? mutate({ ...c }) : { ...c }));
+    setCards(next);
+  };
+
+  return (
+    <aside
+      className="properties translation-figma-channel-master-properties"
+      aria-label="Info card listing controls"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="prop">
+        <label className="prop-label">Active card</label>
+        <div className="prop-segment prop-image-grid-card-tabs" role="tablist" aria-label="Info cards">
+          {cardsMaster.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              role="tab"
+              aria-selected={i === idx}
+              className={i === idx ? 'active' : ''}
+              onClick={() => setActiveCardIndex(idx)}
+            >
+              {idx + 1}
+            </button>
+          ))}
+          {nCards < INFO_CARD_MAX ? (
             <button
               type="button"
-              className="translation-figma-section-head"
-              onClick={() => toggleSection('__event_content')}
-              aria-expanded={openSections.has('__event_content')}
+              className="prop-segment-add"
+              aria-label="Add card"
+              onClick={() => {
+                const next = [...cardsMaster, createDefaultInfoCard(cardsMaster.length)];
+                setCards(next);
+                setActiveCardIndex(next.length - 1);
+              }}
             >
-              <span className="ms material-symbols-outlined translation-figma-chevron">
-                {openSections.has('__event_content') ? 'expand_less' : 'chevron_right'}
-              </span>
-              <span className="translation-figma-section-title">Event content</span>
-              <span
-                className={`translation-figma-section-meta ${
-                  evTotal === 0 || evDone < evTotal
-                    ? 'translation-figma-section-meta--warn'
-                    : 'translation-figma-section-meta--complete'
-                }`}
-              >
-                {evDone}/{evTotal} translated
-              </span>
+              +
             </button>
-            {openSections.has('__event_content') ? (
-              <div className="translation-figma-event-content-body">
-                {eventTranslationRow ? (
-                  <>
-                    <TranslationFigmaFieldRow
-                      row={{ ...eventTranslationRow, fieldLabel: 'Title *', multiline: false }}
-                      needsWarning={
-                        !(eventTranslationRow.targetText || '').trim() ||
-                        (eventTranslationRow.targetText || '').trim() === (eventTranslationRow.sourceText || '').trim()
-                      }
-                      onChange={(v) => handleTargetChange(eventTranslationRow, v)}
-                      onFocusBlock={onSelectBlock}
-                    />
-                  </>
-                ) : null}
-                <div className="translation-figma-description-split-head">
-                  <div className="translation-figma-field-label-row">
-                    <span className="translation-figma-field-label">Description *</span>
-                    {descriptionNeedsWarning ? (
-                      <span className="translation-figma-warn-icon" title="Still matches English or empty">
-                        <span className="ms material-symbols-outlined">warning</span>
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="translation-figma-main-split translation-figma-main-split--in-event">
-                  <div className="translation-figma-preview-column" aria-label="Live preview">
-                    <div
-                      className="translation-figma-preview-slot translation-figma-preview-slot--direct"
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'none';
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                      }}
-                    >
-                      {childrenPreview}
-                    </div>
-                  </div>
-
-                  <div className="translation-figma-editor-column" aria-label="Translation fields">
-                    <div className="translation-figma-editor-column-body">
-                      <div className="translation-figma-dual-wrap">
-                        {blocks.map((block, bi) => {
-                          const blockRows = filtered.filter((r) => r.blockId === block.id);
-                          if (blockRows.length === 0) return null;
-                          const t = COMPONENT_TYPES[block.type];
-                          const secDone = blockRows.filter((r) => !r.needsWarning).length;
-                          const secTotal = blockRows.length;
-                          return (
-                            <div key={block.id} className="translation-figma-section" data-translation-section={block.id}>
-                              <button
-                                type="button"
-                                className="translation-figma-section-head"
-                                onClick={() => toggleSection(block.id)}
-                                aria-expanded={openSections.has(block.id)}
-                              >
-                                <span className="ms material-symbols-outlined translation-figma-chevron">
-                                  {openSections.has(block.id) ? 'expand_less' : 'chevron_right'}
-                                </span>
-                                <span className="translation-figma-section-title">
-                                  <span className="ms material-symbols-outlined translation-figma-section-icon">{t.icon}</span>
-                                  {t.label}
-                                  <span className="translation-figma-section-idx"> · Block {bi + 1}</span>
-                                </span>
-                                <span
-                                  className={`translation-figma-section-meta ${
-                                    secDone < secTotal
-                                      ? 'translation-figma-section-meta--warn'
-                                      : 'translation-figma-section-meta--complete'
-                                  }`}
-                                >
-                                  {secDone}/{secTotal}
-                                </span>
-                              </button>
-                              {openSections.has(block.id)
-                                ? blockRows.map((row) => (
-                                    <TranslationFigmaFieldRow
-                                      key={row.rowId}
-                                      row={row}
-                                      needsWarning={row.needsWarning}
-                                      onChange={(v) => handleTargetChange(row, v)}
-                                      onFocusBlock={onSelectBlock}
-                                    />
-                                  ))
-                                : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="prop-tabs-section">
+        <div className="prop-tabs-section-fields">
+          <div className="prop">
+            <label className="prop-label">Accent color</label>
+            <div className="prop-accent-field">
+              <div className="prop-accent-row">
+                <input
+                  type="text"
+                  className="prop-accent-hex"
+                  value={(cardsMaster[i] ?? cardAt).accentColor ?? ''}
+                  placeholder={INFO_CARD_ACCENT_DEFAULT_HEX}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-label="Accent color (hex)"
+                  onChange={(e) => {
+                    let v = e.target.value;
+                    if (v.length > 0 && !v.startsWith('#')) v = '#' + v.replace(/^#+/, '');
+                    patchCardAccent((c) => ({ ...c, accentColor: v.slice(0, 7) }));
+                  }}
+                  onBlur={(e) => {
+                    const normalized = normalizeAccentHex(e.target.value, INFO_CARD_ACCENT_DEFAULT_HEX);
+                    patchCardAccent((c) => ({ ...c, accentColor: normalized }));
+                  }}
+                />
+                <input
+                  type="color"
+                  className="prop-accent-picker"
+                  value={normalizeAccentHex((cardsMaster[i] ?? cardAt).accentColor, INFO_CARD_ACCENT_DEFAULT_HEX)}
+                  aria-label="Choose accent with color picker"
+                  onChange={(e) => {
+                    patchCardAccent((c) => ({ ...c, accentColor: e.target.value.toLowerCase() }));
+                  }}
+                />
               </div>
-            ) : null}
+              <div className="prop-accent-presets" role="group" aria-label="Default accent colors">
+                {INFO_CARD_ACCENT_PRESETS.map((hex) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    className={`prop-accent-swatch${
+                      normalizeAccentHex((cardsMaster[i] ?? cardAt).accentColor, '') === hex
+                        ? ' prop-accent-swatch--active'
+                        : ''
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    title={hex}
+                    aria-label={`Set accent to ${hex}`}
+                    aria-pressed={normalizeAccentHex((cardsMaster[i] ?? cardAt).accentColor, '') === hex}
+                    onClick={() => {
+                      patchCardAccent((c) => ({ ...c, accentColor: hex }));
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </aside>
+  );
+}
+
+/** Tabs block tab bar color (master `tabBarColor`) for channel editor. */
+function TranslationFigmaTabsBarColorPanel({ block, onPatchMaster }) {
+  if (block.type !== 'tabs' || typeof onPatchMaster !== 'function') return null;
+
+  const masterProps = block.props || {};
+  const tabBarRaw =
+    typeof masterProps.tabBarColor === 'string' ? masterProps.tabBarColor.trim() : '';
+  const tabsBarHasCustom = /^#[0-9A-Fa-f]{6}$/.test(tabBarRaw);
+  const tabsBarEffectiveHex = tabsBarHasCustom ? tabBarRaw : TABS_BAR_COLOR_DEFAULT_HEX;
+  const tabBarNorm = normalizeAccentHex(tabBarRaw, '');
+  const tabsPresetIsActive = (hex) => {
+    if (hex === TABS_BAR_COLOR_DEFAULT_HEX) {
+      return !tabsBarHasCustom || tabBarNorm === TABS_BAR_COLOR_DEFAULT_HEX;
+    }
+    return tabsBarHasCustom && tabBarNorm === hex;
+  };
+
+  return (
+    <aside
+      className="properties translation-figma-channel-master-properties"
+      aria-label="Tabs listing controls"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="prop">
+        <label className="prop-label">Tab bar color</label>
+        <div className="prop-accent-field">
+          <div className="prop-accent-row">
+            <input
+              type="text"
+              className="prop-accent-hex"
+              value={tabsBarHasCustom ? tabBarRaw : ''}
+              placeholder={TABS_BAR_COLOR_DEFAULT_HEX}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              aria-label="Tab bar color (hex)"
+              onChange={(e) => {
+                let v = e.target.value;
+                if (v.length > 0 && !v.startsWith('#')) v = '#' + v.replace(/^#+/, '');
+                onPatchMaster(block.id, { tabBarColor: v.slice(0, 7) });
+              }}
+              onBlur={(e) => {
+                const hexNorm = normalizeAccentHex(e.target.value, '');
+                onPatchMaster(block.id, { tabBarColor: hexNorm || '' });
+              }}
+            />
+            <input
+              type="color"
+              className="prop-accent-picker"
+              value={normalizeAccentHex(tabsBarEffectiveHex, TABS_BAR_COLOR_DEFAULT_HEX)}
+              aria-label="Choose tab bar color"
+              onFocus={() =>
+                onPatchMaster(block.id, {
+                  tabBarColor: normalizeAccentHex(tabsBarEffectiveHex, TABS_BAR_COLOR_DEFAULT_HEX),
+                })
+              }
+              onChange={(e) => onPatchMaster(block.id, { tabBarColor: e.target.value.toLowerCase() })}
+            />
+          </div>
+          <div className="prop-accent-presets" role="group" aria-label="Tab bar color presets">
+            {TABS_BAR_COLOR_PRESETS.map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                className={`prop-accent-swatch${tabsPresetIsActive(hex) ? ' prop-accent-swatch--active' : ''}`}
+                style={{ backgroundColor: hex }}
+                title={hex === TABS_BAR_COLOR_DEFAULT_HEX ? `Default (${hex})` : hex}
+                aria-label={
+                  hex === TABS_BAR_COLOR_DEFAULT_HEX
+                    ? `Use default tab bar color ${hex}`
+                    : `Set tab bar to ${hex}`
+                }
+                aria-pressed={tabsPresetIsActive(hex)}
+                onClick={() =>
+                  onPatchMaster(block.id, {
+                    tabBarColor: hex === TABS_BAR_COLOR_DEFAULT_HEX ? '' : hex,
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -1069,6 +1574,9 @@ function Topbar() {
         fever<span className="zone">ZONE</span>
       </div>
       <div className="topbar-right">
+        <button type="button" className="btn topbar-create-event">
+          Create event
+        </button>
         <div className="user-chip">
           <span>SO Test</span>
           <span className="user-avatar">
@@ -2297,7 +2805,11 @@ function Properties({ block, onDelete, editLocale = SOURCE_LOCALE, onPatch, onRe
 // ---------- Main App ----------
 function App() {
   const [tweaks, setTweak] = useTweaks(TWEAKS_DEFAULTS);
-  const [activeTab, setActiveTab] = React.useState('Content');
+  const [activeTab, setActiveTabState] = React.useState(readPlanTabFromUrl);
+  const selectPlanTab = React.useCallback((t) => {
+    setActiveTabState(t);
+    replacePlanTabInUrl(t);
+  }, []);
   const [device] = React.useState('desktop');
   const [eventTitle, setEventTitle] = React.useState('Pizza in Piazza');
   /** Localized event titles keyed by locale code (excluding master `SOURCE_LOCALE`). */
@@ -2575,7 +3087,7 @@ function App() {
 
           <div className="tabs">
             {['Content','Media','Venue','Translations'].map(t => (
-              <div key={t} className={`tab ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{t}</div>
+              <div key={t} className={`tab ${activeTab===t?'active':''}`} onClick={()=>selectPlanTab(t)}>{t}</div>
             ))}
           </div>
 
@@ -2602,6 +3114,11 @@ function App() {
                     else next[loc] = value;
                     return next;
                   });
+                }}
+                channelEditorLaunchMeta={{
+                  layoutVariant,
+                  device,
+                  selectedBlockId: selectedId,
                 }}
                 blocks={blocks}
                 patchBlockI18n={patchBlockI18n}
@@ -2949,6 +3466,8 @@ function BlocksList({
   isMobileViewport,
   onOpenMobilePicker,
   previewReadOnly,
+  /** When true, hide inline “+” between blocks (inline-plus layout); add only via trailing / empty canvas plus. */
+  suppressBetweenBlockInserters = false,
 }) {
   if (blocks.length === 0 && dragOverIndex < 0) {
     if (previewReadOnly) {
@@ -2970,7 +3489,11 @@ function BlocksList({
           isMobileViewport={isMobileViewport}
           onOpenMobilePicker={onOpenMobilePicker}
         />
-        <div>Drag a component here, double-click one in the palette, or use + to choose</div>
+        <div>
+          {suppressBetweenBlockInserters
+            ? 'Use the + button to add a component.'
+            : 'Drag a component here, double-click one in the palette, or use + to choose'}
+        </div>
       </div>
     );
   }
@@ -2979,7 +3502,7 @@ function BlocksList({
     if (dragOverIndex === i) {
       items.push(<div key={`d-${i}`} className="drop-indicator show"></div>);
     }
-    if (!previewReadOnly && layoutVariant === 'inline-plus' && i < blocks.length) {
+    if (!previewReadOnly && layoutVariant === 'inline-plus' && i < blocks.length && !suppressBetweenBlockInserters) {
       items.push(
         <div key={`ins-${i}`} className="inline-inserter">
           <button
@@ -3048,4 +3571,460 @@ function BlocksList({
   return <>{items}</>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+function TranslationChannelEditorApp() {
+  const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const channelParam = params.get('channel');
+  const channelFromUrl = TRANSLATION_FIGMA_CHANNELS.some((c) => c.id === channelParam) ? channelParam : 'all';
+  const localeParam = params.get('locale');
+
+  const backToTranslationsHref = React.useMemo(() => {
+    const u = new URL('Description%20Builder.html', window.location.href);
+    u.searchParams.set('tab', 'Translations');
+    return u.href;
+  }, []);
+
+  const [stored] = React.useState(readChannelEditorLaunchPayload);
+  const blocksOnLaunch = stored && Array.isArray(stored.blocks) ? stored.blocks : [];
+
+  const [locale, setLocale] = React.useState(() => {
+    if (localeParam && TRANSLATION_LOCALE_OPTIONS.some((o) => o.code === localeParam)) return localeParam;
+    const cand = stored && stored.locale;
+    return cand && TRANSLATION_LOCALE_OPTIONS.some((o) => o.code === cand) ? cand : 'es';
+  });
+  const [eventTitle] = React.useState(() => (stored && stored.eventTitle) || '');
+  const [eventTitleByLocale, setEventTitleByLocale] = React.useState(() => (stored && stored.eventTitleByLocale) || {});
+  const [blocks, setBlocks] = React.useState(() => blocksOnLaunch);
+  const [selectedId, setSelectedId] = React.useState(() => {
+    const id = stored && stored.selectedBlockId;
+    if (id && blocksOnLaunch.some((b) => b.id === id)) return id;
+    return null;
+  });
+  const [pickerIndex, setPickerIndex] = React.useState(null);
+  const [layoutVariant] = React.useState(() => {
+    const lv = stored && stored.layoutVariant;
+    if (lv === 'floating-toolbar' || lv === 'inline-plus' || lv === 'sidebar-properties') return lv;
+    return 'sidebar-properties';
+  });
+  const [device] = React.useState(() => (stored && stored.device === 'mobile' ? 'mobile' : 'desktop'));
+  const [isMobileViewport, setIsMobileViewport] = React.useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_VIEWPORT_QUERY).matches : false,
+  );
+
+  const [dragOver, setDragOver] = React.useState(false);
+  const [dragOverIndex, setDragOverIndex] = React.useState(-1);
+  const [draggingBlockId, setDraggingBlockId] = React.useState(null);
+  const [mobileSheet, setMobileSheet] = React.useState({
+    open: false,
+    insertAtIndex: 0,
+  });
+
+  const lastCanvasDropIndexRef = React.useRef(-1);
+
+  const closeMobileSheet = React.useCallback(() => {
+    setMobileSheet((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const openMobilePicker = React.useCallback((insertAtIndex) => {
+    setMobileSheet({
+      open: true,
+      insertAtIndex: Number.isFinite(insertAtIndex) ? Math.max(0, insertAtIndex) : 0,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const onChange = (e) => setIsMobileViewport(e.matches);
+    setIsMobileViewport(media.matches);
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (pickerIndex !== PICKER_EMPTY && pickerIndex !== PICKER_TRAILING) return;
+    const onDocMouseDown = (e) => {
+      if (e.target.closest('.canvas-empty-plus-wrap')) return;
+      setPickerIndex(null);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [pickerIndex]);
+
+  React.useEffect(() => {
+    if (blocks.length === 0 && pickerIndex === PICKER_TRAILING) setPickerIndex(null);
+  }, [blocks.length, pickerIndex]);
+
+  React.useEffect(() => {
+    if (!isMobileViewport) closeMobileSheet();
+  }, [isMobileViewport, closeMobileSheet]);
+
+  const patchBlockProps = React.useCallback((id, patch) => {
+    setBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, props: { ...b.props, ...patch } } : b)),
+    );
+  }, []);
+
+  const patchBlockI18n = React.useCallback((id, loc, patch) => {
+    if (!patch || loc === SOURCE_LOCALE) return;
+    setBlocks((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const prevOv = (b.i18n && b.i18n[loc]) || {};
+        const nextOv = pruneEmptyOverlayLeaves(mergeI18nDelta(prevOv, patch));
+        return { ...b, i18n: { ...(b.i18n || {}), [loc]: nextOv } };
+      }),
+    );
+  }, []);
+
+  const addBlock = React.useCallback((type, atIndex) => {
+    const newBlock = { id: uid(), type, props: defaultProps(type) };
+    setBlocks((prev) => {
+      const next = [...prev];
+      const idx = atIndex === undefined || atIndex < 0 ? next.length : atIndex;
+      next.splice(idx, 0, newBlock);
+      return next;
+    });
+    setSelectedId(newBlock.id);
+  }, []);
+
+  const deleteBlock = React.useCallback((id) => {
+    setBlocks((prev) => prev.filter((b) => b.id !== id));
+    setSelectedId((sid) => (sid === id ? null : sid));
+  }, []);
+
+  const moveBlock = React.useCallback((id, dir) => {
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === id);
+      const target = idx + dir;
+      if (idx < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(idx, 1);
+      next.splice(target, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const reorderBlock = React.useCallback((id, toIndex) => {
+    setBlocks((prev) => {
+      const fromIndex = prev.findIndex((b) => b.id === id);
+      if (fromIndex < 0) return prev;
+      const clamped = Math.max(0, Math.min(toIndex, prev.length));
+      let insertAt = clamped;
+      if (fromIndex < clamped) insertAt = clamped - 1;
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(insertAt, 0, item);
+      return next;
+    });
+  }, []);
+
+  const routeChannelEditorCanvasPatch = React.useCallback(
+    (id, patch) => {
+      if (!patch) return;
+      if (Object.prototype.hasOwnProperty.call(patch, 'activeIndex')) {
+        patchBlockProps(id, patch);
+        return;
+      }
+      if (locale === SOURCE_LOCALE) patchBlockProps(id, patch);
+      else patchBlockI18n(id, locale, patch);
+    },
+    [locale, patchBlockI18n, patchBlockProps],
+  );
+
+  const handleCanvasDragOver = React.useCallback(
+    (e) => {
+      e.preventDefault();
+      const allowMove =
+        e.dataTransfer.effectAllowed === 'move' || e.dataTransfer.effectAllowed === 'copyMove';
+      e.dataTransfer.dropEffect = allowMove ? 'move' : 'copy';
+      setDragOver(true);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const blockEls = e.currentTarget.querySelectorAll('.block');
+      let idx = blocks.length;
+      for (let i = 0; i < blockEls.length; i++) {
+        const r = blockEls[i].getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) {
+          idx = i;
+          break;
+        }
+      }
+      lastCanvasDropIndexRef.current = idx;
+      setDragOverIndex(idx);
+    },
+    [blocks],
+  );
+
+  const handleCanvasDrop = React.useCallback(
+    (e) => {
+      e.preventDefault();
+      setDragOver(false);
+      const plain = e.dataTransfer.getData('text/plain');
+      const idFromMime = e.dataTransfer.getData(BLOCK_DRAG_MIME);
+      const blockId =
+        draggingBlockId ||
+        idFromMime ||
+        (plain && blocks.some((b) => b.id === plain) ? plain : null);
+      if (blockId && blocks.some((b) => b.id === blockId)) {
+        const refIdx = lastCanvasDropIndexRef.current;
+        const toIndex =
+          refIdx >= 0 ? refIdx : dragOverIndex >= 0 ? dragOverIndex : blocks.length;
+        reorderBlock(blockId, toIndex);
+        setDraggingBlockId(null);
+        lastCanvasDropIndexRef.current = -1;
+        setDragOverIndex(-1);
+        return;
+      }
+      setDraggingBlockId(null);
+      lastCanvasDropIndexRef.current = -1;
+      setDragOverIndex(-1);
+    },
+    [blocks, draggingBlockId, dragOverIndex, reorderBlock],
+  );
+
+  const handleCanvasDragLeave = React.useCallback((e) => {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragOver(false);
+    lastCanvasDropIndexRef.current = -1;
+    setDragOverIndex(-1);
+  }, []);
+
+  const handleBlockDragStart = React.useCallback((e, blockId) => {
+    setDraggingBlockId(blockId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', blockId);
+    e.dataTransfer.setData(BLOCK_DRAG_MIME, blockId);
+  }, []);
+
+  const handleBlockDragEnd = React.useCallback(() => {
+    setDraggingBlockId(null);
+    setDragOver(false);
+    setDragOverIndex(-1);
+  }, []);
+
+  const handleMobileAddBlock = React.useCallback(
+    (type) => {
+      addBlock(type, mobileSheet.insertAtIndex);
+      setPickerIndex(null);
+      closeMobileSheet();
+    },
+    [addBlock, mobileSheet.insertAtIndex, closeMobileSheet],
+  );
+
+  const builderClass = `builder translation-channel-editor-builder--no-side-panels ${
+    layoutVariant === 'floating-toolbar' ? 'floating-tools' : ''
+  } ${layoutVariant === 'inline-plus' ? 'inline-plus' : ''}`;
+
+  const childrenPreview = React.useMemo(() => {
+    const blocksList = (
+      <BlocksList
+        canvasLocale={locale}
+        blocks={blocks}
+        selectedId={selectedId}
+        setSelectedId={setSelectedId}
+        deleteBlock={deleteBlock}
+        moveBlock={moveBlock}
+        dragOverIndex={dragOver ? dragOverIndex : -1}
+        layoutVariant={layoutVariant}
+        addBlock={addBlock}
+        pickerIndex={pickerIndex}
+        setPickerIndex={setPickerIndex}
+        patchBlockProps={routeChannelEditorCanvasPatch}
+        onBlockDragStart={handleBlockDragStart}
+        onBlockDragEnd={handleBlockDragEnd}
+        isMobileViewport={isMobileViewport}
+        onOpenMobilePicker={openMobilePicker}
+        suppressBetweenBlockInserters
+      />
+    );
+
+    const previewRootClass = `translation-channel-editor-preview-root${dragOver ? ' translation-channel-editor-preview-root--drag-over' : ''}${
+      device === 'mobile' ? ' translation-channel-editor-preview-root--device-mobile' : ''
+    }`;
+
+    return (
+      <div className="translation-channel-editor-desc-builder" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`${builderClass} ${previewRootClass}`.trim()}
+          onClick={(e) => e.stopPropagation()}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
+          onDragLeave={handleCanvasDragLeave}
+        >
+          <div className="canvas-header">
+            <div className="canvas-title">Description</div>
+          </div>
+          {device === 'mobile' ? <div className="mobile-frame">{blocksList}</div> : blocksList}
+        </div>
+      </div>
+    );
+  }, [
+    builderClass,
+    locale,
+    blocks,
+    selectedId,
+    dragOver,
+    dragOverIndex,
+    layoutVariant,
+    addBlock,
+    deleteBlock,
+    moveBlock,
+    pickerIndex,
+    routeChannelEditorCanvasPatch,
+    handleBlockDragStart,
+    handleBlockDragEnd,
+    handleCanvasDragOver,
+    handleCanvasDrop,
+    handleCanvasDragLeave,
+    isMobileViewport,
+    device,
+    openMobilePicker,
+  ]);
+
+  return (
+    <div
+      className={`app app--translation-channel-editor-page${isMobileViewport ? ' app-mobile-builder' : ''}`}
+      onClick={() => setSelectedId(null)}
+    >
+      <Topbar />
+      <Sidebar />
+      <main className="main">
+        <div className="main-inner translation-channel-editor-page">
+          <div className="tabs">
+            {['Content', 'Media', 'Venue', 'Translations'].map((t) => (
+              <div key={t} className={`tab ${t === 'Translations' ? 'active' : ''}`}>
+                {t}
+              </div>
+            ))}
+          </div>
+          <div className="translation-channel-editor-workspace-subhead">
+            <a
+              className="translation-channel-editor-back"
+              href={backToTranslationsHref}
+            >
+              <span className="ms material-symbols-outlined translation-channel-editor-back-icon" aria-hidden>
+                chevron_left
+              </span>
+              Back to Translations
+            </a>
+            <button type="button" className="btn btn-primary translation-figma-save-top">
+              Save
+            </button>
+          </div>
+          <div className="translation-plan-page translation-tab-panel">
+            <TranslationFigmaWorkspace
+              previewMode="langAndBody"
+              initialChannelId={channelFromUrl}
+              hideChannelContentEdit
+              allowPreviewCanvasDnD
+              patchBlockMasterProps={patchBlockProps}
+              locale={locale}
+              onLocaleChange={setLocale}
+              eventTitle={eventTitle}
+              eventTitleByLocale={eventTitleByLocale}
+              onLocaleTitleChange={(loc, value) => {
+                setEventTitleByLocale((prev) => {
+                  const next = { ...prev };
+                  if (!value.trim()) delete next[loc];
+                  else next[loc] = value;
+                  return next;
+                });
+              }}
+              blocks={blocks}
+              patchBlockI18n={patchBlockI18n}
+              selectedBlockId={selectedId}
+              onSelectBlock={setSelectedId}
+              childrenPreview={childrenPreview}
+            />
+          </div>
+        </div>
+      </main>
+
+      {isMobileViewport && mobileSheet.open && (
+        <div className="mobile-sheet-overlay" onClick={closeMobileSheet}>
+          <div className="mobile-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-handle" />
+            <>
+              <div className="mobile-sheet-title-row">
+                <div className="mobile-sheet-title">Add component</div>
+                <button type="button" className="mobile-sheet-close" onClick={closeMobileSheet} aria-label="Close">
+                  <span className="ms material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="mobile-sheet-list" role="listbox" aria-label="Components">
+                {PALETTE_ORDER.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    role="option"
+                    className="mobile-sheet-option"
+                    onClick={() => handleMobileAddBlock(type)}
+                  >
+                    <span className="ms material-symbols-outlined">{COMPONENT_TYPES[type].icon}</span>
+                    {COMPONENT_TYPES[type].label}
+                  </button>
+                ))}
+              </div>
+            </>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TranslationLocalePreviewApp() {
+  const [locale, setLocale] = React.useState('es');
+  const [eventTitle] = React.useState('Summer orchestra night');
+  const [eventTitleByLocale, setEventTitleByLocale] = React.useState({});
+  const blocks = [];
+  function patchBlockI18n() {}
+  const emptyPreview = (
+    <div className="canvas-empty canvas-empty--translation-preview">
+      <div>No description blocks yet. Add components on the <strong>Content</strong> tab.</div>
+    </div>
+  );
+  return (
+    <div className="app" onClick={(e) => e.stopPropagation()}>
+      <main className="main">
+        <div className="main-inner translation-locale-preview-shell">
+          <div className="translation-plan-page translation-tab-panel">
+            <TranslationFigmaWorkspace
+              previewMode="langAndBody"
+              locale={locale}
+              onLocaleChange={setLocale}
+              eventTitle={eventTitle}
+              eventTitleByLocale={eventTitleByLocale}
+              onLocaleTitleChange={(loc, value) => {
+                setEventTitleByLocale((prev) => {
+                  const next = { ...prev };
+                  if (!value.trim()) delete next[loc];
+                  else next[loc] = value;
+                  return next;
+                });
+              }}
+              blocks={blocks}
+              patchBlockI18n={patchBlockI18n}
+              selectedBlockId={null}
+              onSelectBlock={() => {}}
+              childrenPreview={emptyPreview}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+const translationChannelEditorMount = document.getElementById('translation-channel-editor-root');
+const translationLocalePreviewMount = document.getElementById('translation-locale-preview-root');
+if (translationChannelEditorMount) {
+  ReactDOM.createRoot(translationChannelEditorMount).render(<TranslationChannelEditorApp />);
+} else if (translationLocalePreviewMount) {
+  ReactDOM.createRoot(translationLocalePreviewMount).render(<TranslationLocalePreviewApp />);
+} else {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+}

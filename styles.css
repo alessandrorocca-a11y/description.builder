@@ -65,6 +65,18 @@ input, textarea, select { font-family: inherit; }
 .topbar-right {
   display: flex; align-items: center; gap: 16px;
 }
+.topbar-create-event {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+}
+.topbar-create-event:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
 .user-chip {
   display: flex; align-items: center; gap: 8px;
   font-size: 14px; color: #fff;
@@ -732,6 +744,304 @@ input, textarea, select { font-family: inherit; }
   color: #031419;
   cursor: pointer;
 }
+.translation-figma-body {
+  min-width: 0;
+}
+.translation-figma-body--by-channel {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+}
+.translation-figma-body-main {
+  flex: 1;
+  min-width: 0;
+}
+.translation-figma-channels-panel {
+  flex: 0 0 300px;
+  width: 300px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid #ccd2d8;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.translation-figma-channel-alert {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--status-warning-tint);
+  border-left: 4px solid #c17a00;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: #5c3d00;
+}
+.translation-figma-channel-alert-icon.ms {
+  flex-shrink: 0;
+  font-size: 22px;
+  color: #c17a00;
+  margin-top: -1px;
+}
+.translation-figma-channel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.translation-figma-channel-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: #536b75;
+}
+.translation-figma-channel-field-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 40px 0 12px;
+  border: 1px solid #ccd2d8;
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+.translation-figma-channel-field-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  color: #031419;
+  cursor: pointer;
+}
+.translation-figma-channel-field-select:focus {
+  outline: none;
+}
+.translation-figma-channel-field-box:focus-within {
+  box-shadow: 0 0 0 3px rgba(0, 158, 224, 0.25);
+}
+.translation-figma-channel-field-chevron {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: #536b75;
+  pointer-events: none;
+}
+.translation-figma-channel-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+.translation-figma-channel-list-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: #536b75;
+}
+.translation-figma-channel-edit-btn,
+.translation-figma-channel-content-edit-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  min-height: 28px;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.translation-figma-channel-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.translation-figma-channel-cards-item {
+  margin: 0;
+  padding: 0;
+}
+.translation-figma-channel-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccd2d8;
+  border-radius: 13px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.translation-figma-channel-card:hover {
+  background: var(--c-grey-75);
+}
+.translation-figma-channel-card--selected {
+  background: #e6f4ff;
+  border-color: #0089e3;
+}
+.translation-figma-channel-card--selected:hover {
+  background: #d9edfc;
+}
+.translation-figma-channel-card-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.translation-figma-channel-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #031419;
+}
+.translation-figma-channel-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  color: #536b75;
+  background: #e8ecef;
+}
+.translation-figma-channel-card-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.translation-figma-channel-card-ok.ms {
+  font-size: 22px;
+  color: #15803d;
+}
+.translation-figma-channel-card-warn.ms {
+  font-size: 22px;
+  color: #e8912d;
+}
+@media (max-width: 900px) {
+  .translation-figma-body--by-channel {
+    flex-direction: column;
+  }
+  .translation-figma-channels-panel {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+.translation-figma-channel-content-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+.translation-figma-channel-content-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 26px;
+  color: #000;
+}
+.translation-figma-channel-content-head-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: right;
+  white-space: nowrap;
+}
+.translation-figma-channel-content-progress-num {
+  color: #031419;
+}
+.translation-figma-channel-content-progress-slash {
+  color: #031419;
+}
+.translation-figma-channel-content-progress-rest {
+  color: #536b75;
+}
+.translation-locale-preview-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+  box-sizing: border-box;
+}
+.translation-figma-root--locale-preview {
+  max-width: 800px;
+  margin: 0 auto;
+}
+.translation-figma-body--locale-preview-solo {
+  display: block;
+}
+.translation-figma-body--locale-preview-solo .translation-figma-body-main {
+  width: 100%;
+  max-width: 100%;
+}
+.app--translation-channel-editor-page .main {
+  background: #fff;
+}
+.app--translation-channel-editor-page .main-inner.translation-channel-editor-page {
+  max-width: none;
+  background: #fff;
+}
+.translation-channel-editor-page {
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 32px;
+}
+.translation-channel-editor-workspace-subhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-top: 12px;
+  margin-bottom: 20px;
+}
+.translation-channel-editor-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0079ca;
+  text-decoration: none;
+}
+.translation-channel-editor-back:hover {
+  color: #006bb3;
+}
+.translation-channel-editor-back-icon.ms {
+  font-size: 22px;
+  line-height: 1;
+  color: inherit;
+}
+.translation-channel-editor-page .translation-figma-root--locale-preview {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
 .translation-figma-master-hint {
   font-size: 13px;
   color: var(--fg-2);
@@ -833,6 +1143,55 @@ input, textarea, select { font-family: inherit; }
 .translation-figma-preview-slot--direct:not(:has(.mobile-frame)) {
   zoom: 0.82;
 }
+.translation-figma-preview-slot--direct.translation-figma-preview-slot--editable-canvas {
+  zoom: 1;
+}
+@supports not (zoom: 1) {
+  .translation-figma-preview-slot--direct.translation-figma-preview-slot--editable-canvas {
+    transform: none;
+    width: 100%;
+    margin-bottom: 0;
+  }
+}
+.translation-channel-editor-desc-builder {
+  min-width: 0;
+  width: 100%;
+}
+.translation-channel-editor-desc-builder .builder {
+  min-width: min(100%, 920px);
+}
+.translation-channel-editor-desc-builder .builder.translation-channel-editor-builder--no-side-panels {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Channel editor preview: one surface instead of .canvas-wrap > .canvas */
+.translation-channel-editor-desc-builder .builder.translation-channel-editor-preview-root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 600px;
+  min-width: 0;
+  overflow-x: hidden;
+  transition: background 120ms, border-color 120ms;
+}
+.translation-channel-editor-desc-builder
+  .builder.translation-channel-editor-preview-root.translation-channel-editor-preview-root--drag-over {
+  background: var(--brand-tint);
+  border-color: var(--brand-primary);
+}
+.translation-channel-editor-desc-builder
+  .builder.translation-channel-editor-preview-root.translation-channel-editor-preview-root--device-mobile {
+  align-items: center;
+  background: var(--c-grey-100);
+}
+
 @supports not (zoom: 1) {
   .translation-figma-preview-slot--direct:not(:has(.mobile-frame)) {
     transform: scale(0.82);
@@ -864,6 +1223,22 @@ input, textarea, select { font-family: inherit; }
 .translation-figma-editor-column-body .translation-figma-dual-wrap {
   border: none;
   border-radius: 0;
+}
+.translation-figma-section-expand > .translation-figma-channel-master-properties,
+.translation-figma-section-expand .translation-figma-channel-master-properties {
+  margin: 0 12px 12px;
+}
+.translation-figma-channel-master-properties.properties {
+  min-height: 0;
+}
+.translation-figma-channel-master-properties .prop:last-child {
+  margin-bottom: 0;
+}
+.translation-figma-channel-master-properties .prop-tabs-section {
+  margin-bottom: 0;
+}
+.translation-figma-channel-master-properties .prop-tabs-section-fields > .prop:last-child {
+  margin-bottom: 0;
 }
 .translation-figma-editor-placeholder {
   border: 1px dashed var(--border-subtle);
@@ -910,6 +1285,12 @@ input, textarea, select { font-family: inherit; }
 }
 .translation-figma-dual-wrap .translation-figma-section:last-child {
   border-bottom: none;
+}
+.translation-figma-section-expand {
+  display: block;
+  overflow: visible;
+  border-top: 1px solid var(--border-subtle);
+  background: #fff;
 }
 .translation-figma-section-head {
   width: 100%;
@@ -2396,7 +2777,6 @@ input, textarea, select { font-family: inherit; }
   border-color: #07252E;
 }
 .btn-primary:hover { background: #0a3540; border-color: #0a3540; }
-.btn.translation-figma-preview-top,
 .btn.translation-figma-save-top {
   padding: 6px 18px;
   font-size: 14px;
@@ -2497,7 +2877,10 @@ input, textarea, select { font-family: inherit; }
   display: none;
   align-items: center; justify-content: center;
 }
-.builder.inline-plus .canvas:hover .inline-inserter button { display: inline-flex; }
+.builder.inline-plus .canvas:hover .inline-inserter button,
+.builder.inline-plus.translation-channel-editor-preview-root:hover .inline-inserter button {
+  display: inline-flex;
+}
 .inline-inserter button:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
 .inline-inserter button .ms { font-size: 16px; }
 
@@ -2589,7 +2972,8 @@ input, textarea, select { font-family: inherit; }
     display: block !important;
   }
 
-  .app-mobile-builder .canvas-wrap {
+  .app-mobile-builder .canvas-wrap,
+  .app-mobile-builder .translation-channel-editor-desc-builder .builder.translation-channel-editor-preview-root {
     min-height: 500px;
   }
 
