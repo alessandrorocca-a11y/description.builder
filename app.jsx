@@ -359,13 +359,16 @@ function mergeLocaleRow(baseRow, overlayRow) {
 /**
  * Merge translated overlay onto base props (same shape as `block.props`).
  * Empty string in overlay means “not translated yet” → use master copy.
+ * Listing-only chrome (info card accent, tabs bar color) always follows master.
  */
 function mergePropsLocaleOverlay(baseProps, overlay) {
   if (!overlay || typeof overlay !== 'object') return baseProps;
   const base = baseProps || {};
   const out = { ...base };
+  const masterOnlyTopKeys = new Set(['tabBarColor']);
   for (const [k, v] of Object.entries(overlay)) {
     if (v === '' || v === undefined) continue;
+    if (masterOnlyTopKeys.has(k)) continue;
     if (
       k !== 'items' &&
       k !== 'cards' &&
@@ -381,7 +384,12 @@ function mergePropsLocaleOverlay(baseProps, overlay) {
     out.items = base.items.map((row, i) => mergeLocaleRow(row || {}, overlay.items[i] || {}));
   }
   if (Array.isArray(base.cards) && overlay.cards) {
-    out.cards = base.cards.map((row, i) => mergeLocaleRow(row || {}, overlay.cards[i] || {}));
+    out.cards = base.cards.map((row, i) => {
+      const ov = overlay.cards[i];
+      if (!ov || typeof ov !== 'object') return mergeLocaleRow(row || {}, {});
+      const { accentColor: _accentOmit, ...ovSansListingChrome } = ov;
+      return mergeLocaleRow(row || {}, ovSansListingChrome);
+    });
   }
   if (Array.isArray(base.tabs) && overlay.tabs) {
     out.tabs = base.tabs.map((row, i) => mergeLocaleRow(row || {}, overlay.tabs[i] || {}));
@@ -516,6 +524,12 @@ function collectTranslationRows(block, locale) {
   }
 
   return rows;
+}
+
+/** `row.rowId` is `${blockId}:cards.${i}.heading` — return card index or null. */
+function translationRowInfoCardIndex(row) {
+  const m = String(row.rowId).match(/:cards\.(\d+)\./);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 /** Apply one target field change (stores overlay-only strings; empty removes override). */
@@ -785,6 +799,8 @@ function TranslationFigmaWorkspace({
   const [openSections, setOpenSections] = React.useState(() =>
     isLangBodyPreview ? new Set(['__event_content']) : new Set(),
   );
+  /** Active info-card index per block (channel editor: matches "Active card" tabs). */
+  const [infoCardSectionTab, setInfoCardSectionTab] = React.useState({});
 
   const translationBlockIdsKey = React.useMemo(() => blocks.map((b) => b.id).join('|'), [blocks]);
 
@@ -812,6 +828,24 @@ function TranslationFigmaWorkspace({
       return next;
     });
   }, [isLangBodyPreview, locale, translationBlockIdsKey]);
+
+  React.useEffect(() => {
+    setInfoCardSectionTab((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const b of blocks) {
+        if (b.type !== 'infoCard') continue;
+        const n = normalizeInfoCardProps(b.props).cards.length;
+        if (n <= 0) continue;
+        const cur = next[b.id];
+        if (typeof cur === 'number' && cur >= n) {
+          next[b.id] = Math.max(0, n - 1);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [blocks]);
 
   React.useEffect(() => {
     if (!translationsByChannel) {
@@ -1044,8 +1078,22 @@ function TranslationFigmaWorkspace({
                           (block.type === 'infoCard' || block.type === 'tabs');
                         if (blockRows.length === 0 && !showMasterChrome) return null;
                         const t = COMPONENT_TYPES[block.type];
-                        const secDone = blockRows.filter((r) => !r.needsWarning).length;
-                        const secTotal = blockRows.length;
+                        const filterInfoCardByActiveTab =
+                          showMasterChrome && block.type === 'infoCard';
+                        const nInfoCards = filterInfoCardByActiveTab
+                          ? normalizeInfoCardProps(block.props).cards.length
+                          : 0;
+                        let activeInfoIdx = filterInfoCardByActiveTab
+                          ? infoCardSectionTab[block.id] ?? 0
+                          : 0;
+                        if (filterInfoCardByActiveTab && nInfoCards > 0) {
+                          activeInfoIdx = Math.min(Math.max(0, activeInfoIdx), nInfoCards - 1);
+                        }
+                        const blockRowsVisible = filterInfoCardByActiveTab
+                          ? blockRows.filter((r) => translationRowInfoCardIndex(r) === activeInfoIdx)
+                          : blockRows;
+                        const secDone = blockRowsVisible.filter((r) => !r.needsWarning).length;
+                        const secTotal = blockRowsVisible.length;
                         const metaComplete = secTotal === 0 || secDone >= secTotal;
                         return (
                           <div key={block.id} className="translation-figma-section" data-translation-section={block.id}>
@@ -1079,6 +1127,10 @@ function TranslationFigmaWorkspace({
                                   <TranslationFigmaInfoCardAccentPanel
                                     block={block}
                                     onPatchMaster={patchBlockMasterProps}
+                                    activeCardIndex={activeInfoIdx}
+                                    onActiveCardIndexChange={(idx) =>
+                                      setInfoCardSectionTab((prev) => ({ ...prev, [block.id]: idx }))
+                                    }
                                   />
                                 ) : null}
                                 {patchBlockMasterProps && block.type === 'tabs' ? (
@@ -1087,7 +1139,7 @@ function TranslationFigmaWorkspace({
                                     onPatchMaster={patchBlockMasterProps}
                                   />
                                 ) : null}
-                                {blockRows.map((row) => (
+                                {blockRowsVisible.map((row) => (
                                   <TranslationFigmaFieldRow
                                     key={row.rowId}
                                     row={row}
@@ -1225,13 +1277,9 @@ function TranslationFigmaWorkspace({
 }
 
 /** Info card master chrome (Active card + accent), matching `Properties` markup for channel editor. */
-function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
-  const [activeCardIndex, setActiveCardIndex] = React.useState(0);
-  React.useEffect(() => {
-    setActiveCardIndex(0);
-  }, [block.id]);
-
+function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster, activeCardIndex, onActiveCardIndexChange }) {
   if (block.type !== 'infoCard' || typeof onPatchMaster !== 'function') return null;
+  if (typeof activeCardIndex !== 'number' || typeof onActiveCardIndexChange !== 'function') return null;
 
   const { cards: cardsMaster } = normalizeInfoCardProps(block.props);
   const nCards = cardsMaster.length;
@@ -1263,7 +1311,7 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
               role="tab"
               aria-selected={i === idx}
               className={i === idx ? 'active' : ''}
-              onClick={() => setActiveCardIndex(idx)}
+              onClick={() => onActiveCardIndexChange(idx)}
             >
               {idx + 1}
             </button>
@@ -1276,7 +1324,7 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
               onClick={() => {
                 const next = [...cardsMaster, createDefaultInfoCard(cardsMaster.length)];
                 setCards(next);
-                setActiveCardIndex(next.length - 1);
+                onActiveCardIndexChange(next.length - 1);
               }}
             >
               +
@@ -1284,13 +1332,20 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
           ) : null}
         </div>
       </div>
-      <div className="prop-tabs-section">
+      <div className="prop-tabs-section" key={`ic-accent-wrap-${block.id}-${i}`}>
+        <div className="prop-tabs-section-head">
+          <div className="prop-tabs-section-head-text">
+            <span className="prop-tabs-section-eyebrow">Listing (master)</span>
+            <h3 className="prop-tabs-section-heading">Card {i + 1}</h3>
+          </div>
+        </div>
         <div className="prop-tabs-section-fields">
           <div className="prop">
             <label className="prop-label">Accent color</label>
-            <div className="prop-accent-field">
+            <div className="prop-accent-field" key={`ic-accent-field-${block.id}-${i}`}>
               <div className="prop-accent-row">
                 <input
+                  key={`ic-hex-${block.id}-${i}`}
                   type="text"
                   className="prop-accent-hex"
                   value={(cardsMaster[i] ?? cardAt).accentColor ?? ''}
@@ -1298,7 +1353,7 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
                   spellCheck={false}
                   autoCapitalize="off"
                   autoCorrect="off"
-                  aria-label="Accent color (hex)"
+                  aria-label={`Accent color hex for card ${i + 1}`}
                   onChange={(e) => {
                     let v = e.target.value;
                     if (v.length > 0 && !v.startsWith('#')) v = '#' + v.replace(/^#+/, '');
@@ -1310,16 +1365,21 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
                   }}
                 />
                 <input
+                  key={`ic-picker-${block.id}-${i}`}
                   type="color"
                   className="prop-accent-picker"
                   value={normalizeAccentHex((cardsMaster[i] ?? cardAt).accentColor, INFO_CARD_ACCENT_DEFAULT_HEX)}
-                  aria-label="Choose accent with color picker"
+                  aria-label={`Choose accent for card ${i + 1}`}
                   onChange={(e) => {
                     patchCardAccent((c) => ({ ...c, accentColor: e.target.value.toLowerCase() }));
                   }}
                 />
               </div>
-              <div className="prop-accent-presets" role="group" aria-label="Default accent colors">
+              <div
+                className="prop-accent-presets"
+                role="group"
+                aria-label={`Default accent colors for card ${i + 1}`}
+              >
                 {INFO_CARD_ACCENT_PRESETS.map((hex) => (
                   <button
                     key={hex}
@@ -1331,7 +1391,7 @@ function TranslationFigmaInfoCardAccentPanel({ block, onPatchMaster }) {
                     }`}
                     style={{ backgroundColor: hex }}
                     title={hex}
-                    aria-label={`Set accent to ${hex}`}
+                    aria-label={`Set card ${i + 1} accent to ${hex}`}
                     aria-pressed={normalizeAccentHex((cardsMaster[i] ?? cardAt).accentColor, '') === hex}
                     onClick={() => {
                       patchCardAccent((c) => ({ ...c, accentColor: hex }));
